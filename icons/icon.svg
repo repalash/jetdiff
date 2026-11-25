@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14.4" fill="#1F2125"/><g transform="translate(6.4 6.4) scale(.8)"><defs><linearGradient id="g" x1="28.5" x2="35.5" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F2A65A"/><stop offset="1" stop-color="#5AA9F2"/></linearGradient></defs>
+<path d="M11 6H28.5V58H11A5 5 0 0 1 6 53V11A5 5 0 0 1 11 6Z" fill="#2C2F35"/>
+<path d="M35.5 6H53A5 5 0 0 1 58 11V53A5 5 0 0 1 53 58H35.5Z" fill="#2C2F35"/>
+<path d="M6 27H28.5V36H6Z" fill="#F2A65A"/>
+<path d="M35.5 18H58V42H35.5Z" fill="#5AA9F2"/>
+<path d="M28.5 27C32 27 32 18 35.5 18V42C32 42 32 36 28.5 36Z" fill="url(#g)"/></g></svg>

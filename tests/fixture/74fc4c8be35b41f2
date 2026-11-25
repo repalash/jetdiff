@@ -1,0 +1,321 @@
+{
+  "url": "https://api.github.com/repos/repalash/threepipe/compare/8bda328450e65167de83505c47621abadfb9d1a7...c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+  "html_url": "https://github.com/repalash/threepipe/compare/8bda328450e65167de83505c47621abadfb9d1a7...c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+  "permalink_url": "https://github.com/repalash/threepipe/compare/repalash:8bda328...repalash:c2df7d7",
+  "diff_url": "https://github.com/repalash/threepipe/compare/8bda328450e65167de83505c47621abadfb9d1a7...c2df7d7a26f86dd3cad9cd13603aa9ad99fde215.diff",
+  "patch_url": "https://github.com/repalash/threepipe/compare/8bda328450e65167de83505c47621abadfb9d1a7...c2df7d7a26f86dd3cad9cd13603aa9ad99fde215.patch",
+  "base_commit": {
+    "sha": "8bda328450e65167de83505c47621abadfb9d1a7",
+    "node_id": "C_kwDOJnp8t9oAKDhiZGEzMjg0NTBlNjUxNjdkZTgzNTA1YzQ3NjIxYWJhZGZiOWQxYTc",
+    "commit": {
+      "author": {
+        "name": "Palash Bansal",
+        "email": "PalashBansal96@gmail.com",
+        "date": "2026-11-12T17:09:54Z"
+      },
+      "committer": {
+        "name": "GitHub",
+        "email": "noreply@github.com",
+        "date": "2026-11-12T17:09:54Z"
+      },
+      "message": "CI: prereleases of dev from a `next` branch (npm dist-tag `next`) (#191)\n\n* CI: prereleases of dev from a `next` branch under the npm dist-tag `next`\n\nThe publish workflow runs on master, next and lane/rNNN. One check before the build (channel-guard, was lane-guard)\nholds every unpublished version to its branch: a prerelease with publishConfig.tag `next` on next, `three-rNNN` on a\nlane, and a release version without a publishConfig.tag on master, so a prerelease or a dist-tag merged by mistake\ndoes not publish to latest. CONTRIBUTING: Prereleases.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WHZ5NrRUojD2GpjigT\n\n* Docs: installing a prerelease with plugins (npm overrides), per-package changelogs, stale `next` tag\n\nnpm never counts a prerelease as matching a plugin's peer range (`>=0.6.0`), so\n`npm i threepipe@next` with any plugin fails with ERESOLVE. Getting started now shows the\n`\"overrides\": {\"threepipe\": \"$threepipe\"}` fix. CONTRIBUTING: each package's own CHANGELOG.md,\nversion bumps that a `dev` merge brings along, and moving the `next` dist-tag after a release.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n\n* Docs: the prerelease install note moves from Getting started to a new FAQ page\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n\n* test:types: the consumer project overrides threepipe with the packed core, so a prerelease core installs\n\nA prerelease (0.7.0-next.0, 0.7.0-r172.1) never matches plugin-tweakpane's peer range `threepipe: >=0.4.0`, so the\nconsumer check's npm install stopped with ERESOLVE and every release from `next` or a lane would stop in post-build\n(Codex on #191). Same override the FAQ gives to users. Checked with npm's resolver (--dry-run) on the 0.6.0 tarball\nrelabelled 0.7.0-next.0 and plugin-tweakpane 0.10.1: exit 1 without the override, 0 with it.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WHZ5NrRUojD2GpjigT\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>\nCo-authored-by: Palash Bansal <palash@shaders.app>",
+      "tree": {
+        "sha": "7341bf0b99af793b86ba824f487ace8dd2843dbb",
+        "url": "https://api.github.com/repos/repalash/threepipe/git/trees/7341bf0b99af793b86ba824f487ace8dd2843dbb"
+      },
+      "url": "https://api.github.com/repos/repalash/threepipe/git/commits/8bda328450e65167de83505c47621abadfb9d1a7",
+      "comment_count": 0,
+      "verification": {
+        "verified": true,
+        "reason": "valid",
+        "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJq9fLiCRC1aQ7uu5UhlAAAZKoQAJy1yOPC+6rzKM/nhnzKWCHl\nPhs6gT7pXCwioyLanXehQRngl88hI1v/Nrs0ct63GSPojCfKtlc6uM4gR8UjTKDx\nFKlasChwuwl9AilEKvHJPBggyzfBpZrkuRTll+0GfbMVAVEOpQarvPRSePtuPll4\nZSSpW8iaKEYSVNWsuZUlwiIq4gf7txKyf171KZsIgyIFK8Y9f1Jh5As4mWJqZoni\nw7qegs8WIbeyzXHf0zu9S2qOs+BEDq+uFWORxb52NoBBhcmVZiKkcv1mVAUXQkp+\nVsFfNYcUJEPXb6wmZTfgJxbAlXnx29zxuDapn6OXAin3yRkjqmsFARO66swNGAP/\ngc7hF6hyCzaiifd+wuuPAiiWSs6yZxdaDsihjI7opUUAP3CVgQJNlM/XfZ1TkdNZ\ndjYKunxNTUfijCsTCb50D0lZWLEldv3x3IOTlf8s/QV8w9+i0K82ZnNC6uwTvDeK\n0AnfmweRpsnZ7Y367zJ0TkIshp6pwNqR5gUQwZq29DxxZWmZy29R7fRPTcFHko1R\n75VyZhOnmfbcbOIB4KcJp3LLg+4l2NbtcqWYTXDS6IHGCvTLY7OOyQe4QY6ZCY2y\n9LIxtfev39N2mxWeYvs8bADVyRk2MO7m15xyIxYVjNybbY+CG4IFPObS+HY5Clwb\nvEIQWxSY+zRnlEIP3Gif\n=6iYU\n-----END PGP SIGNATURE-----\n",
+        "payload": "tree 7341bf0b99af793b86ba824f487ace8dd2843dbb\nparent a78bf1de5ab833f2ce96a56ffe3ac782b7af6c65\nauthor Palash Bansal <PalashBansal96@gmail.com> 1794503394 +0530\ncommitter GitHub <noreply@github.com> 1794503394 -0500\n\nCI: prereleases of dev from a `next` branch (npm dist-tag `next`) (#191)\n\n* CI: prereleases of dev from a `next` branch under the npm dist-tag `next`\n\nThe publish workflow runs on master, next and lane/rNNN. One check before the build (channel-guard, was lane-guard)\nholds every unpublished version to its branch: a prerelease with publishConfig.tag `next` on next, `three-rNNN` on a\nlane, and a release version without a publishConfig.tag on master, so a prerelease or a dist-tag merged by mistake\ndoes not publish to latest. CONTRIBUTING: Prereleases.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WHZ5NrRUojD2GpjigT\n\n* Docs: installing a prerelease with plugins (npm overrides), per-package changelogs, stale `next` tag\n\nnpm never counts a prerelease as matching a plugin's peer range (`>=0.6.0`), so\n`npm i threepipe@next` with any plugin fails with ERESOLVE. Getting started now shows the\n`\"overrides\": {\"threepipe\": \"$threepipe\"}` fix. CONTRIBUTING: each package's own CHANGELOG.md,\nversion bumps that a `dev` merge brings along, and moving the `next` dist-tag after a release.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n\n* Docs: the prerelease install note moves from Getting started to a new FAQ page\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n\n* test:types: the consumer project overrides threepipe with the packed core, so a prerelease core installs\n\nA prerelease (0.7.0-next.0, 0.7.0-r172.1) never matches plugin-tweakpane's peer range `threepipe: >=0.4.0`, so the\nconsumer check's npm install stopped with ERESOLVE and every release from `next` or a lane would stop in post-build\n(Codex on #191). Same override the FAQ gives to users. Checked with npm's resolver (--dry-run) on the 0.6.0 tarball\nrelabelled 0.7.0-next.0 and plugin-tweakpane 0.10.1: exit 1 without the override, 0 with it.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WHZ5NrRUojD2GpjigT\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>\nCo-authored-by: Palash Bansal <palash@shaders.app>",
+        "verified_at": "2026-11-12T17:09:55Z"
+      }
+    },
+    "url": "https://api.github.com/repos/repalash/threepipe/commits/8bda328450e65167de83505c47621abadfb9d1a7",
+    "html_url": "https://github.com/repalash/threepipe/commit/8bda328450e65167de83505c47621abadfb9d1a7",
+    "comments_url": "https://api.github.com/repos/repalash/threepipe/commits/8bda328450e65167de83505c47621abadfb9d1a7/comments",
+    "author": {
+      "login": "repalash",
+      "id": 7613915,
+      "node_id": "MDQ6VXNlcjc2MTM5MTU=",
+      "avatar_url": "https://avatars.githubusercontent.com/u/7613915?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/repalash",
+      "html_url": "https://github.com/repalash",
+      "followers_url": "https://api.github.com/users/repalash/followers",
+      "following_url": "https://api.github.com/users/repalash/following{/other_user}",
+      "gists_url": "https://api.github.com/users/repalash/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/repalash/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/repalash/subscriptions",
+      "organizations_url": "https://api.github.com/users/repalash/orgs",
+      "repos_url": "https://api.github.com/users/repalash/repos",
+      "events_url": "https://api.github.com/users/repalash/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/repalash/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "web-flow",
+      "id": 19864447,
+      "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+      "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/web-flow",
+      "html_url": "https://github.com/web-flow",
+      "followers_url": "https://api.github.com/users/web-flow/followers",
+      "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+      "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+      "organizations_url": "https://api.github.com/users/web-flow/orgs",
+      "repos_url": "https://api.github.com/users/web-flow/repos",
+      "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/web-flow/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "a78bf1de5ab833f2ce96a56ffe3ac782b7af6c65",
+        "url": "https://api.github.com/repos/repalash/threepipe/commits/a78bf1de5ab833f2ce96a56ffe3ac782b7af6c65",
+        "html_url": "https://github.com/repalash/threepipe/commit/a78bf1de5ab833f2ce96a56ffe3ac782b7af6c65"
+      }
+    ]
+  },
+  "merge_base_commit": {
+    "sha": "8bda328450e65167de83505c47621abadfb9d1a7",
+    "node_id": "C_kwDOJnp8t9oAKDhiZGEzMjg0NTBlNjUxNjdkZTgzNTA1YzQ3NjIxYWJhZGZiOWQxYTc",
+    "commit": {
+      "author": {
+        "name": "Palash Bansal",
+        "email": "PalashBansal96@gmail.com",
+        "date": "2026-11-12T17:09:54Z"
+      },
+      "committer": {
+        "name": "GitHub",
+        "email": "noreply@github.com",
+        "date": "2026-11-12T17:09:54Z"
+      },
+      "message": "CI: prereleases of dev from a `next` branch (npm dist-tag `next`) (#191)\n\n* CI: prereleases of dev from a `next` branch under the npm dist-tag `next`\n\nThe publish workflow runs on master, next and lane/rNNN. One check before the build (channel-guard, was lane-guard)\nholds every unpublished version to its branch: a prerelease with publishConfig.tag `next` on next, `three-rNNN` on a\nlane, and a release version without a publishConfig.tag on master, so a prerelease or a dist-tag merged by mistake\ndoes not publish to latest. CONTRIBUTING: Prereleases.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WHZ5NrRUojD2GpjigT\n\n* Docs: installing a prerelease with plugins (npm overrides), per-package changelogs, stale `next` tag\n\nnpm never counts a prerelease as matching a plugin's peer range (`>=0.6.0`), so\n`npm i threepipe@next` with any plugin fails with ERESOLVE. Getting started now shows the\n`\"overrides\": {\"threepipe\": \"$threepipe\"}` fix. CONTRIBUTING: each package's own CHANGELOG.md,\nversion bumps that a `dev` merge brings along, and moving the `next` dist-tag after a release.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n\n* Docs: the prerelease install note moves from Getting started to a new FAQ page\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n\n* test:types: the consumer project overrides threepipe with the packed core, so a prerelease core installs\n\nA prerelease (0.7.0-next.0, 0.7.0-r172.1) never matches plugin-tweakpane's peer range `threepipe: >=0.4.0`, so the\nconsumer check's npm install stopped with ERESOLVE and every release from `next` or a lane would stop in post-build\n(Codex on #191). Same override the FAQ gives to users. Checked with npm's resolver (--dry-run) on the 0.6.0 tarball\nrelabelled 0.7.0-next.0 and plugin-tweakpane 0.10.1: exit 1 without the override, 0 with it.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WHZ5NrRUojD2GpjigT\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>\nCo-authored-by: Palash Bansal <palash@shaders.app>",
+      "tree": {
+        "sha": "7341bf0b99af793b86ba824f487ace8dd2843dbb",
+        "url": "https://api.github.com/repos/repalash/threepipe/git/trees/7341bf0b99af793b86ba824f487ace8dd2843dbb"
+      },
+      "url": "https://api.github.com/repos/repalash/threepipe/git/commits/8bda328450e65167de83505c47621abadfb9d1a7",
+      "comment_count": 0,
+      "verification": {
+        "verified": true,
+        "reason": "valid",
+        "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJq9fLiCRC1aQ7uu5UhlAAAZKoQAJy1yOPC+6rzKM/nhnzKWCHl\nPhs6gT7pXCwioyLanXehQRngl88hI1v/Nrs0ct63GSPojCfKtlc6uM4gR8UjTKDx\nFKlasChwuwl9AilEKvHJPBggyzfBpZrkuRTll+0GfbMVAVEOpQarvPRSePtuPll4\nZSSpW8iaKEYSVNWsuZUlwiIq4gf7txKyf171KZsIgyIFK8Y9f1Jh5As4mWJqZoni\nw7qegs8WIbeyzXHf0zu9S2qOs+BEDq+uFWORxb52NoBBhcmVZiKkcv1mVAUXQkp+\nVsFfNYcUJEPXb6wmZTfgJxbAlXnx29zxuDapn6OXAin3yRkjqmsFARO66swNGAP/\ngc7hF6hyCzaiifd+wuuPAiiWSs6yZxdaDsihjI7opUUAP3CVgQJNlM/XfZ1TkdNZ\ndjYKunxNTUfijCsTCb50D0lZWLEldv3x3IOTlf8s/QV8w9+i0K82ZnNC6uwTvDeK\n0AnfmweRpsnZ7Y367zJ0TkIshp6pwNqR5gUQwZq29DxxZWmZy29R7fRPTcFHko1R\n75VyZhOnmfbcbOIB4KcJp3LLg+4l2NbtcqWYTXDS6IHGCvTLY7OOyQe4QY6ZCY2y\n9LIxtfev39N2mxWeYvs8bADVyRk2MO7m15xyIxYVjNybbY+CG4IFPObS+HY5Clwb\nvEIQWxSY+zRnlEIP3Gif\n=6iYU\n-----END PGP SIGNATURE-----\n",
+        "payload": "tree 7341bf0b99af793b86ba824f487ace8dd2843dbb\nparent a78bf1de5ab833f2ce96a56ffe3ac782b7af6c65\nauthor Palash Bansal <PalashBansal96@gmail.com> 1794503394 +0530\ncommitter GitHub <noreply@github.com> 1794503394 -0500\n\nCI: prereleases of dev from a `next` branch (npm dist-tag `next`) (#191)\n\n* CI: prereleases of dev from a `next` branch under the npm dist-tag `next`\n\nThe publish workflow runs on master, next and lane/rNNN. One check before the build (channel-guard, was lane-guard)\nholds every unpublished version to its branch: a prerelease with publishConfig.tag `next` on next, `three-rNNN` on a\nlane, and a release version without a publishConfig.tag on master, so a prerelease or a dist-tag merged by mistake\ndoes not publish to latest. CONTRIBUTING: Prereleases.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WHZ5NrRUojD2GpjigT\n\n* Docs: installing a prerelease with plugins (npm overrides), per-package changelogs, stale `next` tag\n\nnpm never counts a prerelease as matching a plugin's peer range (`>=0.6.0`), so\n`npm i threepipe@next` with any plugin fails with ERESOLVE. Getting started now shows the\n`\"overrides\": {\"threepipe\": \"$threepipe\"}` fix. CONTRIBUTING: each package's own CHANGELOG.md,\nversion bumps that a `dev` merge brings along, and moving the `next` dist-tag after a release.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n\n* Docs: the prerelease install note moves from Getting started to a new FAQ page\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n\n* test:types: the consumer project overrides threepipe with the packed core, so a prerelease core installs\n\nA prerelease (0.7.0-next.0, 0.7.0-r172.1) never matches plugin-tweakpane's peer range `threepipe: >=0.4.0`, so the\nconsumer check's npm install stopped with ERESOLVE and every release from `next` or a lane would stop in post-build\n(Codex on #191). Same override the FAQ gives to users. Checked with npm's resolver (--dry-run) on the 0.6.0 tarball\nrelabelled 0.7.0-next.0 and plugin-tweakpane 0.10.1: exit 1 without the override, 0 with it.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WHZ5NrRUojD2GpjigT\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>\nCo-authored-by: Palash Bansal <palash@shaders.app>",
+        "verified_at": "2026-11-12T17:09:55Z"
+      }
+    },
+    "url": "https://api.github.com/repos/repalash/threepipe/commits/8bda328450e65167de83505c47621abadfb9d1a7",
+    "html_url": "https://github.com/repalash/threepipe/commit/8bda328450e65167de83505c47621abadfb9d1a7",
+    "comments_url": "https://api.github.com/repos/repalash/threepipe/commits/8bda328450e65167de83505c47621abadfb9d1a7/comments",
+    "author": {
+      "login": "repalash",
+      "id": 7613915,
+      "node_id": "MDQ6VXNlcjc2MTM5MTU=",
+      "avatar_url": "https://avatars.githubusercontent.com/u/7613915?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/repalash",
+      "html_url": "https://github.com/repalash",
+      "followers_url": "https://api.github.com/users/repalash/followers",
+      "following_url": "https://api.github.com/users/repalash/following{/other_user}",
+      "gists_url": "https://api.github.com/users/repalash/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/repalash/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/repalash/subscriptions",
+      "organizations_url": "https://api.github.com/users/repalash/orgs",
+      "repos_url": "https://api.github.com/users/repalash/repos",
+      "events_url": "https://api.github.com/users/repalash/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/repalash/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "web-flow",
+      "id": 19864447,
+      "node_id": "MDQ6VXNlcjE5ODY0NDQ3",
+      "avatar_url": "https://avatars.githubusercontent.com/u/19864447?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/web-flow",
+      "html_url": "https://github.com/web-flow",
+      "followers_url": "https://api.github.com/users/web-flow/followers",
+      "following_url": "https://api.github.com/users/web-flow/following{/other_user}",
+      "gists_url": "https://api.github.com/users/web-flow/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/web-flow/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/web-flow/subscriptions",
+      "organizations_url": "https://api.github.com/users/web-flow/orgs",
+      "repos_url": "https://api.github.com/users/web-flow/repos",
+      "events_url": "https://api.github.com/users/web-flow/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/web-flow/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "a78bf1de5ab833f2ce96a56ffe3ac782b7af6c65",
+        "url": "https://api.github.com/repos/repalash/threepipe/commits/a78bf1de5ab833f2ce96a56ffe3ac782b7af6c65",
+        "html_url": "https://github.com/repalash/threepipe/commit/a78bf1de5ab833f2ce96a56ffe3ac782b7af6c65"
+      }
+    ]
+  },
+  "status": "ahead",
+  "ahead_by": 3,
+  "behind_by": 0,
+  "total_commits": 3,
+  "commits": [
+    {
+      "sha": "aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+      "node_id": "C_kwDOJnp8t9oAKGFhNDRhM2E0MzFhNTk5ZTRlYzA3MzMxZTlmMTBlM2NjMzRmYzQwNDk",
+      "commit": {
+        "author": {
+          "name": "Palash Bansal",
+          "email": "palash@shaders.app",
+          "date": "2026-11-12T18:17:07Z"
+        },
+        "committer": {
+          "name": "Claude",
+          "email": "noreply@anthropic.com",
+          "date": "2026-11-12T18:17:07Z"
+        },
+        "message": "CHANGELOG: CanvasRecorderPlugin frameSink and registerRecorder (#184) under Unreleased\n\n#184 added frameSink (DirectoryFrameSink, ZipFrameSink), registerRecorder and unregisterRecorder without a CHANGELOG\nentry (found by the release review of 0.7.0-next.0).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b",
+        "tree": {
+          "sha": "97d680d7667674ec4ebe5fcbcaf87ec6e656bda7",
+          "url": "https://api.github.com/repos/repalash/threepipe/git/trees/97d680d7667674ec4ebe5fcbcaf87ec6e656bda7"
+        },
+        "url": "https://api.github.com/repos/repalash/threepipe/git/commits/aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+        "comment_count": 0,
+        "verification": {
+          "verified": true,
+          "reason": "valid",
+          "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrLzsfFISF4by8Q+FKz27YpkK1USsBB+m\namu1QkJnbDsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQAYJ6HSS\n2yIunmg1viuJ1Dhi/rwgPhrEQkntLlq6V54Xg3teFA5wnJ+HKvgimLKyh1SVIrXUQPTPL+6eMsBv\n1AY=\n-----END SSH SIGNATURE-----",
+          "payload": "tree 97d680d7667674ec4ebe5fcbcaf87ec6e656bda7\nparent 8bda328450e65167de83505c47621abadfb9d1a7\nauthor Palash Bansal <palash@shaders.app> 1794507427 +0000\ncommitter Claude <noreply@anthropic.com> 1794507427 +0000\n\nCHANGELOG: CanvasRecorderPlugin frameSink and registerRecorder (#184) under Unreleased\n\n#184 added frameSink (DirectoryFrameSink, ZipFrameSink), registerRecorder and unregisterRecorder without a CHANGELOG\nentry (found by the release review of 0.7.0-next.0).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n",
+          "verified_at": "2026-11-12T18:19:45Z"
+        }
+      },
+      "url": "https://api.github.com/repos/repalash/threepipe/commits/aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+      "html_url": "https://github.com/repalash/threepipe/commit/aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+      "comments_url": "https://api.github.com/repos/repalash/threepipe/commits/aa44a3a431a599e4ec07331e9f10e3cc34fc4049/comments",
+      "author": {
+        "login": "shaderpal",
+        "id": 266350037,
+        "node_id": "U_kgDOD-At1Q",
+        "avatar_url": "https://avatars.githubusercontent.com/u/266350037?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/shaderpal",
+        "html_url": "https://github.com/shaderpal",
+        "followers_url": "https://api.github.com/users/shaderpal/followers",
+        "following_url": "https://api.github.com/users/shaderpal/following{/other_user}",
+        "gists_url": "https://api.github.com/users/shaderpal/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/shaderpal/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/shaderpal/subscriptions",
+        "organizations_url": "https://api.github.com/users/shaderpal/orgs",
+        "repos_url": "https://api.github.com/users/shaderpal/repos",
+        "events_url": "https://api.github.com/users/shaderpal/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/shaderpal/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "committer": {
+        "login": "claude",
+        "id": 81847,
+        "node_id": "MDQ6VXNlcjgxODQ3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/claude",
+        "html_url": "https://github.com/claude",
+        "followers_url": "https://api.github.com/users/claude/followers",
+        "following_url": "https://api.github.com/users/claude/following{/other_user}",
+        "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+        "organizations_url": "https://api.github.com/users/claude/orgs",
+        "repos_url": "https://api.github.com/users/claude/repos",
+        "events_url": "https://api.github.com/users/claude/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/claude/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "parents": [
+        {
+          "sha": "8bda328450e65167de83505c47621abadfb9d1a7",
+          "url": "https://api.github.com/repos/repalash/threepipe/commits/8bda328450e65167de83505c47621abadfb9d1a7",
+          "html_url": "https://github.com/repalash/threepipe/commit/8bda328450e65167de83505c47621abadfb9d1a7"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "sha": "be04af9e89a89cdb0481582ab07ed52bd99c8653",
+      "filename": "CHANGELOG.md",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 0,
+      "changes": 1,
+      "blob_url": "https://github.com/repalash/threepipe/blob/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/CHANGELOG.md",
+      "raw_url": "https://github.com/repalash/threepipe/raw/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/CHANGELOG.md",
+      "contents_url": "https://api.github.com/repos/repalash/threepipe/contents/CHANGELOG.md?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+      "patch": "@@ -19,6 +19,7 @@ All notable changes to this project will be documented in this file.\n - New package [`@threepipe/plugin-annotations`](https://threepipe.org/package/plugin-annotations.html): `AnnotationsPlugin`, 3D annotations like Sketchfab's. Numbered markers on objects with a title, a text and a saved camera view; a click flies the camera to the view. Editable mode to add, edit, move and delete; the edits and the selection are undoable, and `dragOnlySelected` lets only the open annotation be dragged. `closeOnCanvasInteraction` closes the card on any click, drag or wheel zoom on the canvas. `compactCard`: a title-and-text card and a tour bar (‹ title ›) at the bottom that fades while the camera moves; `showCloseButton`. `renderCardContent` lets the app render the card from its values in `Annotation.data`. Saved in the viewer config and in the exported .glb. Example: `examples/annotations-plugin`\n - [`GPUPickingPlugin`](https://threepipe.org/plugin/GPUPickingPlugin.html): `pick(x, y, filter?)` finds the front-most mesh under a point of the canvas by rendering object ids and depth into a 1×1 float target (the camera narrowed to that pixel), with the hit point, distance and world normal (on the side the camera sees; each mesh is drawn with the side of its material, so culled faces are not hit; the interpolated vertex normal, or the flat one for flat shading, octahedral-encoded in the free channels of the same pixel). One small draw, no triangle tests and no tree in memory; for hover and clicks on what is visible. Perspective and orthographic cameras, skinned, morphed, instanced and batched meshes; wireframe materials are hit on their lines, and the global clipping planes of the renderer cut the pick. It implements `IGPUPicker` (`isGPUPicker`, `pick`), the one interface for GPU pickers, so code that picks can find any of them among the plugins. Example: `examples/gpu-picking-plugin` (a marker and a normal arrow at the picked point)\n - [`CanvasRecorderPlugin`](https://threepipe.org/plugin/CanvasRecorderPlugin.html), ported from webgi: records the canvas to MP4 (ffmpeg.js, `FFMPEGRecorder.LIBRARY_PATH`), to the browser's `MediaRecorder` format (`mimeType: 'auto'`) or to an image sequence. Converge mode captures a frame after the `ProgressivePlugin` converges and steps the animations by `1 / videoFrameRate` per frame. A recording keeps the format, frame rate and converge mode it started with (`recordingSettings`). Also `record(action)`, `recordCamera360`, `download360Recording`, the recorders `FFMPEGRecorder`, `CanvasMediaRecorder`, `ImageSequenceRecorder` and `ACanvasRecorder`, and an example. A recording does not start on a disabled viewer or with rendering paused; when rendering stops during one, `record()` resolves with the frames recorded so far and `stopRecording()` does not wait for frames\n+- `CanvasRecorderPlugin.frameSink`: an image sequence gives its frames, in order, to a sink instead of only a folder from the browser's picker: `DirectoryFrameSink` (the folder, the default), `ZipFrameSink` (one zip download, in every browser and with no picker), a function, or an object with `start`, `write`, `finish` and `dispose`. In converge mode the next frame waits for the sink. \"Save frames to\" in the plugin UI picks Folder or Zip download. `registerRecorder(name, factory, match?, ui?)` adds a recorder under its own name, ahead of the built-in ones, with an optional entry in the format list (`unregisterRecorder` removes it)\n - `CameraViewPlugin.recordAllViews()` (and its UI button) records the animation through all the camera views with the `CanvasRecorderPlugin`\n - `ProgressivePlugin.postFrameConvergedRecordingDelta()` returns the recording delta of a `CanvasRecorderPlugin` (it was a stub that returned -1)\n - `ThreeViewer.enabled` dispatches `viewerEnabled` or `viewerDisabled` when it changes (also when the WebGL context is lost and restored), as `renderEnabled` dispatches `renderEnabled`/`renderDisabled`. A wait for `postFrame` can end on it, since a disabled viewer sends no frames"
+    },
+    {
+      "sha": "fefebe206b95ddfacb2303bb0f5d5ce18bd142b8",
+      "filename": "plugins/cloud/CHANGELOG.md",
+      "status": "modified",
+      "additions": 11,
+      "deletions": 5,
+      "changes": 16,
+      "blob_url": "https://github.com/repalash/threepipe/blob/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/plugins%2Fcloud%2FCHANGELOG.md",
+      "raw_url": "https://github.com/repalash/threepipe/raw/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/plugins%2Fcloud%2FCHANGELOG.md",
+      "contents_url": "https://api.github.com/repos/repalash/threepipe/contents/plugins%2Fcloud%2FCHANGELOG.md?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+      "patch": "@@ -2,12 +2,9 @@\n \n ## [Unreleased]\n \n-### Fixed\n-\n-- The package builds again and is not built during `npm install`: it writes its declarations with `declarations()` of `scripts/vite-utils.mjs` (as the other packages; `fixDtsImports` and `vite-plugin-dts` are no longer there), into `dist/` (`rootDir` in its tsconfig), and it has no `prepare` script, so a failed build no longer stops `npm ci` of the repository\n-- `npm run typecheck` checks the code again: TypeScript 7 stopped at `baseUrl` (TS5102, removed) before checking anything. The tsconfig is now the one of the other packages (no `baseUrl` or `paths`, `strict: false`, `types: [\"*\"]`), with their `src/global.d.ts` for the shader and CSS imports of the core sources it reads\n+The first version.\n \n-## 0.1.0\n+### Added\n \n - Initial package: `ThreepipeCloudPlugin`, the client of threepipe cloud (https://cloud.threepipe.org, services/cloud).\n   - `auth`: Sign in with threepipe (a key for the app's folder, or the whole drive), kept for the session.\n@@ -16,3 +13,12 @@\n   - `feedback`: the Report a problem dialog (bug, question, idea, other) with a screenshot, the scene, the redacted log\n     around `console` and `ThreeViewer.Console`, the environment and `addContext` providers; toasts for problems with\n     fingerprints, `reportError`. Signed-in reports skip Turnstile.\n+\n+### Security\n+\n+- `cloud.auth` on a page without storage (the sandboxed pages of files.threepipe.org): a key in the URL is taken only after the person confirms it, in a dialog that names the account the key was issued to (the email in the key, which a link cannot change, unlike `tp_cloud_user`). Such a page cannot keep the `state` of its own sign-in, so it took any key, and a link carrying someone else's key signed the visitor in to that account: their saves, shares and reports went there. `auth.confirmUnverified(account)` replaces the dialog (default `confirm()`; no sign-in where it is not available). Pages with storage check the `state` as before and never ask\n+\n+### Fixed\n+\n+- The package builds again and is not built during `npm install`: it writes its declarations with `declarations()` of `scripts/vite-utils.mjs` (as the other packages; `fixDtsImports` and `vite-plugin-dts` are no longer there), into `dist/` (`rootDir` in its tsconfig), and it has no `prepare` script, so a failed build no longer stops `npm ci` of the repository\n+- `npm run typecheck` checks the code again: TypeScript 7 stopped at `baseUrl` (TS5102, removed) before checking anything. The tsconfig is now the one of the other packages (no `baseUrl` or `paths`, `strict: false`, `types: [\"*\"]`), with their `src/global.d.ts` for the shader and CSS imports of the core sources it reads"
+    },
+    {
+      "sha": "aaefd855d308efd984e1b08f83d1367c1a713a03",
+      "filename": "plugins/cloud/src/auth/CloudAuth.ts",
+      "status": "modified",
+      "additions": 43,
+      "deletions": 6,
+      "changes": 49,
+      "blob_url": "https://github.com/repalash/threepipe/blob/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/plugins%2Fcloud%2Fsrc%2Fauth%2FCloudAuth.ts",
+      "raw_url": "https://github.com/repalash/threepipe/raw/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/plugins%2Fcloud%2Fsrc%2Fauth%2FCloudAuth.ts",
+      "contents_url": "https://api.github.com/repos/repalash/threepipe/contents/plugins%2Fcloud%2Fsrc%2Fauth%2FCloudAuth.ts?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+      "patch": "@@ -17,11 +17,28 @@ const STATE_KEY = 'threepipeCloudState'\n  *\n  * `signIn()` keeps a random `state` in sessionStorage and the cloud sends it back with the key; `handleRedirect()` takes\n  * only a key that brings it back, so a link with someone else's key in its fragment does not sign the page in. A page\n- * without storage (sandboxed) cannot keep it and takes the key as it comes.\n+ * without storage (sandboxed) cannot keep the state, so it asks the person before it takes a key\n+ * ({@link confirmUnverified}), naming the account the key belongs to.\n  */\n export class CloudAuth {\n     private _s: Session | null = null\n \n+    /**\n+     * Asked when a page without storage (sandboxed) gets a key in its URL: such a page cannot tell a sign-in it started\n+     * from a link with someone else's key, which would put the person's saves, shares and reports in that account.\n+     * `account` is the email the key was issued to, read from the key itself (a link can change `tp_cloud_user`, not\n+     * that), or `''` when the key names none. Return `true` to sign in. Default: the browser's `confirm()`; `false`\n+     * where it is not available (a sandbox without `allow-modals`). Set it to show the app's own dialog.\n+     */\n+    confirmUnverified: (account: string) => boolean = account => {\n+        try {\n+            return typeof confirm === 'function' && confirm(`Sign in to threepipe cloud as ${account || 'an account this page cannot name'}?\\n\\n` +\n+                'This page cannot check that you started this sign-in. Press Cancel unless you just signed in.')\n+        } catch {\n+            return false\n+        }\n+    }\n+\n     constructor(private _endpoint: () => string) {\n         try {\n             const s = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null') as Session | null\n@@ -98,17 +115,37 @@ export class CloudAuth {\n             console.warn('CloudAuth: ignored a key from another endpoint', from)\n             return null\n         }\n+        if (expected === undefined && !this.confirmUnverified(accountOf(key))) {\n+            console.warn('CloudAuth: ignored a sign-in this page could not check, which was not confirmed')\n+            return null\n+        }\n         this._s = {key, user: p.get('tp_cloud_user') || '', folder: p.get('tp_cloud_folder') || '', api, exp: expiry(key)}\n         try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(this._s)) } catch { /* no storage */ }\n         return 'signed-in'\n     }\n }\n \n+/** The claims of a JWT (not verified: the cloud checks the signature of every request), or `{}`. */\n+function claims(jwt: string): Record<string, unknown> {\n+    try {\n+        const c = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))\n+        return c && typeof c === 'object' ? c : {}\n+    } catch {\n+        return {} // not a JWT\n+    }\n+}\n+\n /** The `exp` of a JWT, in seconds; now + 1 h when it cannot be read. */\n function expiry(jwt: string): number {\n-    try {\n-        const exp = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp\n-        if (typeof exp === 'number') return exp\n-    } catch { /* not a JWT */ }\n-    return Math.floor(Date.now() / 1000) + 3600\n+    const exp = claims(jwt).exp\n+    return typeof exp === 'number' ? exp : Math.floor(Date.now() / 1000) + 3600\n+}\n+\n+/**\n+ * The account a key was issued to: its `sub`, the account's email (services/cloud mintKey). A changed claim breaks the\n+ * signature, so the key would not work for it.\n+ */\n+function accountOf(jwt: string): string {\n+    const sub = claims(jwt).sub\n+    return typeof sub === 'string' ? sub : ''\n }"
+    },
+    {
+      "sha": "51b0fc34ece0eb1db365057a6571b8b4854e6fa5",
+      "filename": "plugins/cloud/tests/auth.test.ts",
+      "status": "modified",
+      "additions": 65,
+      "deletions": 4,
+      "changes": 69,
+      "blob_url": "https://github.com/repalash/threepipe/blob/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/plugins%2Fcloud%2Ftests%2Fauth.test.ts",
+      "raw_url": "https://github.com/repalash/threepipe/raw/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/plugins%2Fcloud%2Ftests%2Fauth.test.ts",
+      "contents_url": "https://api.github.com/repos/repalash/threepipe/contents/plugins%2Fcloud%2Ftests%2Fauth.test.ts?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+      "patch": "@@ -1,10 +1,12 @@\n // Sign in with threepipe: the key in the URL fragment after signIn() is taken only when it brings back the state this\n-// tab kept (a link with someone else's key does not sign the page in), and only from the configured endpoint.\n+// tab kept (a link with someone else's key does not sign the page in), and only from the configured endpoint. A page\n+// without storage cannot keep the state, so it asks the person first, naming the account the key was issued to.\n import {afterEach, describe, expect, test, vi} from 'vitest'\n import {CloudAuth} from '../src/auth/CloudAuth'\n \n const API = 'https://cloud.example'\n-const KEY = 'eyJhbGciOiJIUzI1NiJ9.' + btoa(JSON.stringify({exp: Math.floor(Date.now() / 1000) + 3600})).replace(/=+$/, '') + '.sig'\n+const jwt = (claims: object) => 'eyJhbGciOiJIUzI1NiJ9.' + btoa(JSON.stringify(claims)).replace(/=+$/, '') + '.sig'\n+const KEY = jwt({exp: Math.floor(Date.now() / 1000) + 3600, sub: 'me@example.com'})\n \n function page(o: {storage?: boolean} = {}) {\n     const store = new Map<string, string>()\n@@ -58,13 +60,72 @@ describe('CloudAuth.handleRedirect', () => {\n         warn.mockRestore()\n     })\n \n-    test('a sandboxed page (no storage) takes the key as it comes', () => {\n+    test('a sandboxed page (no storage) asks first, naming the account from the key, and signs in on OK', () => {\n         const {loc} = page({storage: false})\n+        const ask = vi.fn(() => true)\n+        vi.stubGlobal('confirm', ask)\n         const auth = new CloudAuth(() => API)\n         auth.signIn()\n         expect(stateOf(loc)).toBeNull()\n-        back(loc, {tp_cloud_key: KEY, tp_cloud_user: 'me', tp_cloud_folder: 'f1', tp_cloud_api: API})\n+        // the link's tp_cloud_user is plain text anyone can set; the question names the key's own account\n+        back(loc, {tp_cloud_key: KEY, tp_cloud_user: 'a-name-you-trust', tp_cloud_folder: 'f1', tp_cloud_api: API})\n         expect(auth.handleRedirect()).toBe('signed-in')\n+        expect(ask).toHaveBeenCalledTimes(1)\n+        expect(ask.mock.calls[0][0]).toContain('me@example.com')\n+        expect(ask.mock.calls[0][0]).not.toContain('a-name-you-trust')\n+        expect(auth.key).toBe(KEY)\n+    })\n+\n+    test('a sandboxed page does not sign in on Cancel, without confirm(), or when the key names no account and is cancelled', () => {\n+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)\n+        for (const confirmImpl of [() => false, undefined, () => { throw new Error('blocked') }]) {\n+            const {loc} = page({storage: false})\n+            vi.stubGlobal('confirm', confirmImpl)\n+            const auth = new CloudAuth(() => API)\n+            back(loc, {tp_cloud_key: KEY, tp_cloud_user: 'victim', tp_cloud_folder: 'f1', tp_cloud_api: API})\n+            expect(auth.handleRedirect()).toBeNull()\n+            expect(auth.signedIn).toBe(false)\n+            vi.unstubAllGlobals()\n+        }\n+        const {loc} = page({storage: false})\n+        const ask = vi.fn(() => false)\n+        vi.stubGlobal('confirm', ask)\n+        const auth = new CloudAuth(() => API)\n+        back(loc, {tp_cloud_key: jwt({exp: Math.floor(Date.now() / 1000) + 3600}), tp_cloud_user: 'x', tp_cloud_folder: 'f1', tp_cloud_api: API})\n+        expect(auth.handleRedirect()).toBeNull()\n+        expect(ask.mock.calls[0][0]).toContain('an account this page cannot name')\n+        warn.mockRestore()\n+    })\n+\n+    test('confirmUnverified replaces the dialog; a page with storage never asks', () => {\n+        const ask = vi.fn(() => true)\n+        vi.stubGlobal('confirm', ask)\n+        const own = vi.fn((account: string) => account === 'me@example.com')\n+        const sandboxed = page({storage: false})\n+        const auth = new CloudAuth(() => API)\n+        auth.confirmUnverified = own\n+        back(sandboxed.loc, {tp_cloud_key: KEY, tp_cloud_user: 'me', tp_cloud_folder: 'f1', tp_cloud_api: API})\n+        expect(auth.handleRedirect()).toBe('signed-in')\n+        expect(own).toHaveBeenCalledWith('me@example.com')\n+\n+        const {loc} = page()\n+        const auth2 = new CloudAuth(() => API)\n+        auth2.signIn()\n+        back(loc, {tp_cloud_key: KEY, tp_cloud_user: 'me', tp_cloud_folder: 'f1', tp_cloud_api: API, tp_cloud_state: stateOf(loc)!})\n+        expect(auth2.handleRedirect()).toBe('signed-in')\n+        expect(ask).not.toHaveBeenCalled()\n+    })\n+\n+    test('a sandboxed page does not ask about a key from another endpoint', () => {\n+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)\n+        const {loc} = page({storage: false})\n+        const ask = vi.fn(() => true)\n+        vi.stubGlobal('confirm', ask)\n+        const auth = new CloudAuth(() => API)\n+        back(loc, {tp_cloud_key: KEY, tp_cloud_user: 'me', tp_cloud_folder: 'f1', tp_cloud_api: 'https://evil.example'})\n+        expect(auth.handleRedirect()).toBeNull()\n+        expect(ask).not.toHaveBeenCalled()\n+        warn.mockRestore()\n     })\n \n     test('Cancel comes back as denied with the state', () => {"
+    },
+    {
+      "sha": "0032211bb9cf527e111d00b26104ea15e0fc6ce9",
+      "filename": "website/package/plugin-cloud.md",
+      "status": "modified",
+      "additions": 2,
+      "deletions": 0,
+      "changes": 2,
+      "blob_url": "https://github.com/repalash/threepipe/blob/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/website%2Fpackage%2Fplugin-cloud.md",
+      "raw_url": "https://github.com/repalash/threepipe/raw/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/website%2Fpackage%2Fplugin-cloud.md",
+      "contents_url": "https://api.github.com/repos/repalash/threepipe/contents/website%2Fpackage%2Fplugin-cloud.md?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+      "patch": "@@ -106,6 +106,8 @@ cookies, storage or history.\n   folder id, or `*` with `access: 'drive'`). Sign-in works for apps on files.threepipe.org (`s/`, `p/`, `b/`, `d/`), on\n   `*.threepipe.org`, and on `localhost` / `*.localhost` while developing; other domains are not supported yet. Pages on\n   files.threepipe.org run sandboxed without storage: call `signIn()` on load there; once approved it comes straight back.\n+  Such a page cannot check that it started the sign-in, so it asks the person before it takes the key, naming the\n+  account the key was issued to; `confirmUnverified(account)` replaces that dialog with the app's own (return `true` to sign in).\n - `cloud.drive`: `save(name, blob, {folder?})`, `saveFolder(name, files, {folder?, entry?})`, `list(folder?)`, `resolve(path)`,\n   `item(id)`, `read(id, path?)`, `rename`, `move`, `remove`, `share` / `unshare`, `newId` (every old URL stops working),\n   `fileUrl(id, path?, ttl?)`, `newFolder(name, parent?)`. Each upload is an item with a fixed URL; names and folders are labels."
+    }
+  ]
+}

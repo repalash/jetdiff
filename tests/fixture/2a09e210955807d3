@@ -1,0 +1,248 @@
+[
+  {
+    "sha": "aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+    "node_id": "C_kwDOJnp8t9oAKGFhNDRhM2E0MzFhNTk5ZTRlYzA3MzMxZTlmMTBlM2NjMzRmYzQwNDk",
+    "commit": {
+      "author": {
+        "name": "Palash Bansal",
+        "email": "palash@shaders.app",
+        "date": "2026-11-12T18:17:07Z"
+      },
+      "committer": {
+        "name": "Claude",
+        "email": "noreply@anthropic.com",
+        "date": "2026-11-12T18:17:07Z"
+      },
+      "message": "CHANGELOG: CanvasRecorderPlugin frameSink and registerRecorder (#184) under Unreleased\n\n#184 added frameSink (DirectoryFrameSink, ZipFrameSink), registerRecorder and unregisterRecorder without a CHANGELOG\nentry (found by the release review of 0.7.0-next.0).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b",
+      "tree": {
+        "sha": "97d680d7667674ec4ebe5fcbcaf87ec6e656bda7",
+        "url": "https://api.github.com/repos/repalash/threepipe/git/trees/97d680d7667674ec4ebe5fcbcaf87ec6e656bda7"
+      },
+      "url": "https://api.github.com/repos/repalash/threepipe/git/commits/aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+      "comment_count": 0,
+      "verification": {
+        "verified": true,
+        "reason": "valid",
+        "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrLzsfFISF4by8Q+FKz27YpkK1USsBB+m\namu1QkJnbDsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQAYJ6HSS\n2yIunmg1viuJ1Dhi/rwgPhrEQkntLlq6V54Xg3teFA5wnJ+HKvgimLKyh1SVIrXUQPTPL+6eMsBv\n1AY=\n-----END SSH SIGNATURE-----",
+        "payload": "tree 97d680d7667674ec4ebe5fcbcaf87ec6e656bda7\nparent 8bda328450e65167de83505c47621abadfb9d1a7\nauthor Palash Bansal <palash@shaders.app> 1794507427 +0000\ncommitter Claude <noreply@anthropic.com> 1794507427 +0000\n\nCHANGELOG: CanvasRecorderPlugin frameSink and registerRecorder (#184) under Unreleased\n\n#184 added frameSink (DirectoryFrameSink, ZipFrameSink), registerRecorder and unregisterRecorder without a CHANGELOG\nentry (found by the release review of 0.7.0-next.0).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n",
+        "verified_at": "2026-11-12T18:19:45Z"
+      }
+    },
+    "url": "https://api.github.com/repos/repalash/threepipe/commits/aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+    "html_url": "https://github.com/repalash/threepipe/commit/aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+    "comments_url": "https://api.github.com/repos/repalash/threepipe/commits/aa44a3a431a599e4ec07331e9f10e3cc34fc4049/comments",
+    "author": {
+      "login": "shaderpal",
+      "id": 266350037,
+      "node_id": "U_kgDOD-At1Q",
+      "avatar_url": "https://avatars.githubusercontent.com/u/266350037?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/shaderpal",
+      "html_url": "https://github.com/shaderpal",
+      "followers_url": "https://api.github.com/users/shaderpal/followers",
+      "following_url": "https://api.github.com/users/shaderpal/following{/other_user}",
+      "gists_url": "https://api.github.com/users/shaderpal/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/shaderpal/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/shaderpal/subscriptions",
+      "organizations_url": "https://api.github.com/users/shaderpal/orgs",
+      "repos_url": "https://api.github.com/users/shaderpal/repos",
+      "events_url": "https://api.github.com/users/shaderpal/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/shaderpal/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "claude",
+      "id": 81847,
+      "node_id": "MDQ6VXNlcjgxODQ3",
+      "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/claude",
+      "html_url": "https://github.com/claude",
+      "followers_url": "https://api.github.com/users/claude/followers",
+      "following_url": "https://api.github.com/users/claude/following{/other_user}",
+      "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+      "organizations_url": "https://api.github.com/users/claude/orgs",
+      "repos_url": "https://api.github.com/users/claude/repos",
+      "events_url": "https://api.github.com/users/claude/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/claude/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "8bda328450e65167de83505c47621abadfb9d1a7",
+        "url": "https://api.github.com/repos/repalash/threepipe/commits/8bda328450e65167de83505c47621abadfb9d1a7",
+        "html_url": "https://github.com/repalash/threepipe/commit/8bda328450e65167de83505c47621abadfb9d1a7"
+      }
+    ]
+  },
+  {
+    "sha": "3fd0f7958b7f8118dc61cc8f60cd148b2dea2083",
+    "node_id": "C_kwDOJnp8t9oAKDNmZDBmNzk1OGI3ZjgxMThkYzYxY2M4ZjYwY2QxNDhiMmRlYTIwODM",
+    "commit": {
+      "author": {
+        "name": "Palash Bansal",
+        "email": "palash@shaders.app",
+        "date": "2026-11-12T18:19:08Z"
+      },
+      "committer": {
+        "name": "Claude",
+        "email": "noreply@anthropic.com",
+        "date": "2026-11-12T18:19:08Z"
+      },
+      "message": "plugin-cloud: a page without storage asks before it takes a key, naming the key's account\n\nA sandboxed page (files.threepipe.org) cannot keep the state of its own sign-in, so handleRedirect took any key in\nthe URL, and a link carrying someone else's key signed the visitor in to that account: their saves, shares and\nreports went there (found by the release review of 0.1.0-next.0). Such a page now asks first, with the email the key\nwas issued to, read from the key (a link can change tp_cloud_user, not that). `auth.confirmUnverified(account)`\nreplaces the confirm() dialog; where confirm() is not available, no sign-in. Pages with storage check the state as\nbefore and never ask.\n\nChecked in Chromium on a page served with the files.threepipe.org sandbox CSP: sessionStorage throws, the dialog\nnames the key's account and not tp_cloud_user, Cancel leaves the page signed out, OK signs in.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b",
+      "tree": {
+        "sha": "2d101fd90da0a3d66291363ae7d3cd79d125698a",
+        "url": "https://api.github.com/repos/repalash/threepipe/git/trees/2d101fd90da0a3d66291363ae7d3cd79d125698a"
+      },
+      "url": "https://api.github.com/repos/repalash/threepipe/git/commits/3fd0f7958b7f8118dc61cc8f60cd148b2dea2083",
+      "comment_count": 0,
+      "verification": {
+        "verified": true,
+        "reason": "valid",
+        "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrLzsfFISF4by8Q+FKz27YpkK1USsBB+m\namu1QkJnbDsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQGT6Zh9Y\nG9NWEHYlfwYZ1x0xVZp8r1h8NAINR2el2SERhr9UnNa4R5Farf5d+eXM4/Pfe1shXOrvYia04aLI\n4gw=\n-----END SSH SIGNATURE-----",
+        "payload": "tree 2d101fd90da0a3d66291363ae7d3cd79d125698a\nparent aa44a3a431a599e4ec07331e9f10e3cc34fc4049\nauthor Palash Bansal <palash@shaders.app> 1794507548 +0000\ncommitter Claude <noreply@anthropic.com> 1794507548 +0000\n\nplugin-cloud: a page without storage asks before it takes a key, naming the key's account\n\nA sandboxed page (files.threepipe.org) cannot keep the state of its own sign-in, so handleRedirect took any key in\nthe URL, and a link carrying someone else's key signed the visitor in to that account: their saves, shares and\nreports went there (found by the release review of 0.1.0-next.0). Such a page now asks first, with the email the key\nwas issued to, read from the key (a link can change tp_cloud_user, not that). `auth.confirmUnverified(account)`\nreplaces the confirm() dialog; where confirm() is not available, no sign-in. Pages with storage check the state as\nbefore and never ask.\n\nChecked in Chromium on a page served with the files.threepipe.org sandbox CSP: sessionStorage throws, the dialog\nnames the key's account and not tp_cloud_user, Cancel leaves the page signed out, OK signs in.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n",
+        "verified_at": "2026-11-12T18:19:45Z"
+      }
+    },
+    "url": "https://api.github.com/repos/repalash/threepipe/commits/3fd0f7958b7f8118dc61cc8f60cd148b2dea2083",
+    "html_url": "https://github.com/repalash/threepipe/commit/3fd0f7958b7f8118dc61cc8f60cd148b2dea2083",
+    "comments_url": "https://api.github.com/repos/repalash/threepipe/commits/3fd0f7958b7f8118dc61cc8f60cd148b2dea2083/comments",
+    "author": {
+      "login": "shaderpal",
+      "id": 266350037,
+      "node_id": "U_kgDOD-At1Q",
+      "avatar_url": "https://avatars.githubusercontent.com/u/266350037?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/shaderpal",
+      "html_url": "https://github.com/shaderpal",
+      "followers_url": "https://api.github.com/users/shaderpal/followers",
+      "following_url": "https://api.github.com/users/shaderpal/following{/other_user}",
+      "gists_url": "https://api.github.com/users/shaderpal/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/shaderpal/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/shaderpal/subscriptions",
+      "organizations_url": "https://api.github.com/users/shaderpal/orgs",
+      "repos_url": "https://api.github.com/users/shaderpal/repos",
+      "events_url": "https://api.github.com/users/shaderpal/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/shaderpal/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "claude",
+      "id": 81847,
+      "node_id": "MDQ6VXNlcjgxODQ3",
+      "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/claude",
+      "html_url": "https://github.com/claude",
+      "followers_url": "https://api.github.com/users/claude/followers",
+      "following_url": "https://api.github.com/users/claude/following{/other_user}",
+      "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+      "organizations_url": "https://api.github.com/users/claude/orgs",
+      "repos_url": "https://api.github.com/users/claude/repos",
+      "events_url": "https://api.github.com/users/claude/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/claude/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+        "url": "https://api.github.com/repos/repalash/threepipe/commits/aa44a3a431a599e4ec07331e9f10e3cc34fc4049",
+        "html_url": "https://github.com/repalash/threepipe/commit/aa44a3a431a599e4ec07331e9f10e3cc34fc4049"
+      }
+    ]
+  },
+  {
+    "sha": "c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+    "node_id": "C_kwDOJnp8t9oAKGMyZGY3ZDdhMjZmODZkZDNjYWQ5Y2QxMzYwM2FhOWFkOTlmZGUyMTU",
+    "commit": {
+      "author": {
+        "name": "Palash Bansal",
+        "email": "palash@shaders.app",
+        "date": "2026-11-12T18:19:08Z"
+      },
+      "committer": {
+        "name": "Claude",
+        "email": "noreply@anthropic.com",
+        "date": "2026-11-12T18:19:08Z"
+      },
+      "message": "plugin-cloud CHANGELOG: the never-released 0.1.0 section moves into [Unreleased], with the sign-in fix\n\n0.1.0 was never published, so its section would have let the stable release pass the changelog check without notes\nfor the fixes since. [Unreleased] now holds the whole first version: Added, Security, Fixed.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b",
+      "tree": {
+        "sha": "9316c27858f044c68e95753be26aef6e3bd51237",
+        "url": "https://api.github.com/repos/repalash/threepipe/git/trees/9316c27858f044c68e95753be26aef6e3bd51237"
+      },
+      "url": "https://api.github.com/repos/repalash/threepipe/git/commits/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+      "comment_count": 0,
+      "verification": {
+        "verified": true,
+        "reason": "valid",
+        "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrLzsfFISF4by8Q+FKz27YpkK1USsBB+m\namu1QkJnbDsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQFaaRnBD\nWjkQJ7MR70WA6Hsj62+H7dLK0QvpYcAsxEUF55yvtcZVty8WBUZLKuyy/vS4Lhf9zDcD299BdLio\now8=\n-----END SSH SIGNATURE-----",
+        "payload": "tree 9316c27858f044c68e95753be26aef6e3bd51237\nparent 3fd0f7958b7f8118dc61cc8f60cd148b2dea2083\nauthor Palash Bansal <palash@shaders.app> 1794507548 +0000\ncommitter Claude <noreply@anthropic.com> 1794507548 +0000\n\nplugin-cloud CHANGELOG: the never-released 0.1.0 section moves into [Unreleased], with the sign-in fix\n\n0.1.0 was never published, so its section would have let the stable release pass the changelog check without notes\nfor the fixes since. [Unreleased] now holds the whole first version: Added, Security, Fixed.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n",
+        "verified_at": "2026-11-12T18:19:45Z"
+      }
+    },
+    "url": "https://api.github.com/repos/repalash/threepipe/commits/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+    "html_url": "https://github.com/repalash/threepipe/commit/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+    "comments_url": "https://api.github.com/repos/repalash/threepipe/commits/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/comments",
+    "author": {
+      "login": "shaderpal",
+      "id": 266350037,
+      "node_id": "U_kgDOD-At1Q",
+      "avatar_url": "https://avatars.githubusercontent.com/u/266350037?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/shaderpal",
+      "html_url": "https://github.com/shaderpal",
+      "followers_url": "https://api.github.com/users/shaderpal/followers",
+      "following_url": "https://api.github.com/users/shaderpal/following{/other_user}",
+      "gists_url": "https://api.github.com/users/shaderpal/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/shaderpal/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/shaderpal/subscriptions",
+      "organizations_url": "https://api.github.com/users/shaderpal/orgs",
+      "repos_url": "https://api.github.com/users/shaderpal/repos",
+      "events_url": "https://api.github.com/users/shaderpal/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/shaderpal/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "committer": {
+      "login": "claude",
+      "id": 81847,
+      "node_id": "MDQ6VXNlcjgxODQ3",
+      "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/claude",
+      "html_url": "https://github.com/claude",
+      "followers_url": "https://api.github.com/users/claude/followers",
+      "following_url": "https://api.github.com/users/claude/following{/other_user}",
+      "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+      "organizations_url": "https://api.github.com/users/claude/orgs",
+      "repos_url": "https://api.github.com/users/claude/repos",
+      "events_url": "https://api.github.com/users/claude/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/claude/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "parents": [
+      {
+        "sha": "3fd0f7958b7f8118dc61cc8f60cd148b2dea2083",
+        "url": "https://api.github.com/repos/repalash/threepipe/commits/3fd0f7958b7f8118dc61cc8f60cd148b2dea2083",
+        "html_url": "https://github.com/repalash/threepipe/commit/3fd0f7958b7f8118dc61cc8f60cd148b2dea2083"
+      }
+    ]
+  }
+]

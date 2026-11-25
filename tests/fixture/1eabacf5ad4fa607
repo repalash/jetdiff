@@ -1,0 +1,101 @@
+{
+  "sha": "c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+  "node_id": "C_kwDOJnp8t9oAKGMyZGY3ZDdhMjZmODZkZDNjYWQ5Y2QxMzYwM2FhOWFkOTlmZGUyMTU",
+  "commit": {
+    "author": {
+      "name": "Palash Bansal",
+      "email": "palash@shaders.app",
+      "date": "2026-11-12T18:19:08Z"
+    },
+    "committer": {
+      "name": "Claude",
+      "email": "noreply@anthropic.com",
+      "date": "2026-11-12T18:19:08Z"
+    },
+    "message": "plugin-cloud CHANGELOG: the never-released 0.1.0 section moves into [Unreleased], with the sign-in fix\n\n0.1.0 was never published, so its section would have let the stable release pass the changelog check without notes\nfor the fixes since. [Unreleased] now holds the whole first version: Added, Security, Fixed.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b",
+    "tree": {
+      "sha": "9316c27858f044c68e95753be26aef6e3bd51237",
+      "url": "https://api.github.com/repos/repalash/threepipe/git/trees/9316c27858f044c68e95753be26aef6e3bd51237"
+    },
+    "url": "https://api.github.com/repos/repalash/threepipe/git/commits/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+    "comment_count": 0,
+    "verification": {
+      "verified": true,
+      "reason": "valid",
+      "signature": "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgrLzsfFISF4by8Q+FKz27YpkK1USsBB+m\namu1QkJnbDsAAAADZ2l0AAAAAAAAAAZzaGE1MTIAAABTAAAAC3NzaC1lZDI1NTE5AAAAQFaaRnBD\nWjkQJ7MR70WA6Hsj62+H7dLK0QvpYcAsxEUF55yvtcZVty8WBUZLKuyy/vS4Lhf9zDcD299BdLio\now8=\n-----END SSH SIGNATURE-----",
+      "payload": "tree 9316c27858f044c68e95753be26aef6e3bd51237\nparent 3fd0f7958b7f8118dc61cc8f60cd148b2dea2083\nauthor Palash Bansal <palash@shaders.app> 1794507548 +0000\ncommitter Claude <noreply@anthropic.com> 1794507548 +0000\n\nplugin-cloud CHANGELOG: the never-released 0.1.0 section moves into [Unreleased], with the sign-in fix\n\n0.1.0 was never published, so its section would have let the stable release pass the changelog check without notes\nfor the fixes since. [Unreleased] now holds the whole first version: Added, Security, Fixed.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01EWN5WJVoif5u2R5D96ps9b\n",
+      "verified_at": "2026-11-12T18:19:45Z"
+    }
+  },
+  "url": "https://api.github.com/repos/repalash/threepipe/commits/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+  "html_url": "https://github.com/repalash/threepipe/commit/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+  "comments_url": "https://api.github.com/repos/repalash/threepipe/commits/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/comments",
+  "author": {
+    "login": "shaderpal",
+    "id": 266350037,
+    "node_id": "U_kgDOD-At1Q",
+    "avatar_url": "https://avatars.githubusercontent.com/u/266350037?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/shaderpal",
+    "html_url": "https://github.com/shaderpal",
+    "followers_url": "https://api.github.com/users/shaderpal/followers",
+    "following_url": "https://api.github.com/users/shaderpal/following{/other_user}",
+    "gists_url": "https://api.github.com/users/shaderpal/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/shaderpal/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/shaderpal/subscriptions",
+    "organizations_url": "https://api.github.com/users/shaderpal/orgs",
+    "repos_url": "https://api.github.com/users/shaderpal/repos",
+    "events_url": "https://api.github.com/users/shaderpal/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/shaderpal/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "committer": {
+    "login": "claude",
+    "id": 81847,
+    "node_id": "MDQ6VXNlcjgxODQ3",
+    "avatar_url": "https://avatars.githubusercontent.com/u/81847?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/claude",
+    "html_url": "https://github.com/claude",
+    "followers_url": "https://api.github.com/users/claude/followers",
+    "following_url": "https://api.github.com/users/claude/following{/other_user}",
+    "gists_url": "https://api.github.com/users/claude/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/claude/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/claude/subscriptions",
+    "organizations_url": "https://api.github.com/users/claude/orgs",
+    "repos_url": "https://api.github.com/users/claude/repos",
+    "events_url": "https://api.github.com/users/claude/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/claude/received_events",
+    "type": "User",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "parents": [
+    {
+      "sha": "3fd0f7958b7f8118dc61cc8f60cd148b2dea2083",
+      "url": "https://api.github.com/repos/repalash/threepipe/commits/3fd0f7958b7f8118dc61cc8f60cd148b2dea2083",
+      "html_url": "https://github.com/repalash/threepipe/commit/3fd0f7958b7f8118dc61cc8f60cd148b2dea2083"
+    }
+  ],
+  "stats": {
+    "total": 16,
+    "additions": 11,
+    "deletions": 5
+  },
+  "files": [
+    {
+      "sha": "fefebe206b95ddfacb2303bb0f5d5ce18bd142b8",
+      "filename": "plugins/cloud/CHANGELOG.md",
+      "status": "modified",
+      "additions": 11,
+      "deletions": 5,
+      "changes": 16,
+      "blob_url": "https://github.com/repalash/threepipe/blob/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/plugins%2Fcloud%2FCHANGELOG.md",
+      "raw_url": "https://github.com/repalash/threepipe/raw/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215/plugins%2Fcloud%2FCHANGELOG.md",
+      "contents_url": "https://api.github.com/repos/repalash/threepipe/contents/plugins%2Fcloud%2FCHANGELOG.md?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215",
+      "patch": "@@ -2,12 +2,9 @@\n \n ## [Unreleased]\n \n-### Fixed\n-\n-- The package builds again and is not built during `npm install`: it writes its declarations with `declarations()` of `scripts/vite-utils.mjs` (as the other packages; `fixDtsImports` and `vite-plugin-dts` are no longer there), into `dist/` (`rootDir` in its tsconfig), and it has no `prepare` script, so a failed build no longer stops `npm ci` of the repository\n-- `npm run typecheck` checks the code again: TypeScript 7 stopped at `baseUrl` (TS5102, removed) before checking anything. The tsconfig is now the one of the other packages (no `baseUrl` or `paths`, `strict: false`, `types: [\"*\"]`), with their `src/global.d.ts` for the shader and CSS imports of the core sources it reads\n+The first version.\n \n-## 0.1.0\n+### Added\n \n - Initial package: `ThreepipeCloudPlugin`, the client of threepipe cloud (https://cloud.threepipe.org, services/cloud).\n   - `auth`: Sign in with threepipe (a key for the app's folder, or the whole drive), kept for the session.\n@@ -16,3 +13,12 @@\n   - `feedback`: the Report a problem dialog (bug, question, idea, other) with a screenshot, the scene, the redacted log\n     around `console` and `ThreeViewer.Console`, the environment and `addContext` providers; toasts for problems with\n     fingerprints, `reportError`. Signed-in reports skip Turnstile.\n+\n+### Security\n+\n+- `cloud.auth` on a page without storage (the sandboxed pages of files.threepipe.org): a key in the URL is taken only after the person confirms it, in a dialog that names the account the key was issued to (the email in the key, which a link cannot change, unlike `tp_cloud_user`). Such a page cannot keep the `state` of its own sign-in, so it took any key, and a link carrying someone else's key signed the visitor in to that account: their saves, shares and reports went there. `auth.confirmUnverified(account)` replaces the dialog (default `confirm()`; no sign-in where it is not available). Pages with storage check the `state` as before and never ask\n+\n+### Fixed\n+\n+- The package builds again and is not built during `npm install`: it writes its declarations with `declarations()` of `scripts/vite-utils.mjs` (as the other packages; `fixDtsImports` and `vite-plugin-dts` are no longer there), into `dist/` (`rootDir` in its tsconfig), and it has no `prepare` script, so a failed build no longer stops `npm ci` of the repository\n+- `npm run typecheck` checks the code again: TypeScript 7 stopped at `baseUrl` (TS5102, removed) before checking anything. The tsconfig is now the one of the other packages (no `baseUrl` or `paths`, `strict: false`, `types: [\"*\"]`), with their `src/global.d.ts` for the shader and CSS imports of the core sources it reads"
+    }
+  ]
+}

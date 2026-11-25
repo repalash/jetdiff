@@ -1,0 +1,162 @@
+{
+ "/repos/repalash/threepipe/pulls/193/commits?per_page=100&page=1": {
+  "file": "2a09e210955807d3",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/pulls/193": {
+  "file": "816766324756a6f3",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/compare/8bda328450e65167de83505c47621abadfb9d1a7...c2df7d7a26f86dd3cad9cd13603aa9ad99fde215?per_page=1": {
+  "file": "74fc4c8be35b41f2",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/pulls/193/files?per_page=100&page=1": {
+  "file": "9a23e487e733b336",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/CHANGELOG.md?ref=8bda328450e65167de83505c47621abadfb9d1a7": {
+  "file": "83b10d8f970313ad",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/CHANGELOG.md?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215": {
+  "file": "5ad80aa6f5de4ac1",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/CHANGELOG.md?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215": {
+  "file": "e47c9dac2c3c680c",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/CHANGELOG.md?ref=8bda328450e65167de83505c47621abadfb9d1a7": {
+  "file": "9afc66aa99cf2dca",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/tests/auth.test.ts?ref=8bda328450e65167de83505c47621abadfb9d1a7": {
+  "file": "a940d57454dc1b4f",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/tests/auth.test.ts?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215": {
+  "file": "c86d43e3d3612d56",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/src/auth/CloudAuth.ts?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215": {
+  "file": "9ad18e8811387c14",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/website/package/plugin-cloud.md?ref=8bda328450e65167de83505c47621abadfb9d1a7": {
+  "file": "5f0794fbff669e27",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/website/package/plugin-cloud.md?ref=c2df7d7a26f86dd3cad9cd13603aa9ad99fde215": {
+  "file": "1f9c84319604aeee",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/src/auth/CloudAuth.ts?ref=8bda328450e65167de83505c47621abadfb9d1a7": {
+  "file": "3de4adb445b15b9c",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/commits/aa44a3a431a599e4ec07331e9f10e3cc34fc4049?per_page=100": {
+  "file": "fc6b3ae3344bc857",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/CHANGELOG.md?ref=aa44a3a431a599e4ec07331e9f10e3cc34fc4049": {
+  "file": "fd4ad182a50b97fb",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/commits/3fd0f7958b7f8118dc61cc8f60cd148b2dea2083?per_page=100": {
+  "file": "1370dc474ac13d06",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/src/auth/CloudAuth.ts?ref=aa44a3a431a599e4ec07331e9f10e3cc34fc4049": {
+  "file": "7256ca930a49517e",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/src/auth/CloudAuth.ts?ref=3fd0f7958b7f8118dc61cc8f60cd148b2dea2083": {
+  "file": "24eedd94ad6d019f",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/tests/auth.test.ts?ref=3fd0f7958b7f8118dc61cc8f60cd148b2dea2083": {
+  "file": "97b7e4aeca60716c",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/tests/auth.test.ts?ref=aa44a3a431a599e4ec07331e9f10e3cc34fc4049": {
+  "file": "b2b0442906f62113",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/website/package/plugin-cloud.md?ref=aa44a3a431a599e4ec07331e9f10e3cc34fc4049": {
+  "file": "b638175a2ffb01a4",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/website/package/plugin-cloud.md?ref=3fd0f7958b7f8118dc61cc8f60cd148b2dea2083": {
+  "file": "eaae2179739b40cc",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/commits/c2df7d7a26f86dd3cad9cd13603aa9ad99fde215?per_page=100": {
+  "file": "1eabacf5ad4fa607",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/contents/plugins/cloud/CHANGELOG.md?ref=3fd0f7958b7f8118dc61cc8f60cd148b2dea2083": {
+  "file": "077f6f95253faa80",
+  "status": 200,
+  "type": "text/plain; charset=utf-8"
+ },
+ "/search/issues?q=repo%3Arepalash%2Fthreepipe%20is%3Apr%20is%3Aopen&sort=created&order=desc&per_page=50": {
+  "file": "9e1aa4c7e71f1c07",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/search/issues?q=repo%3Arepalash%2Fthreepipe%20is%3Apr%20is%3Aclosed%20is%3Aunmerged&sort=created&order=desc&per_page=50": {
+  "file": "3805d3e2e4963a66",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/search/issues?q=repo%3Arepalash%2Fthreepipe%20is%3Apr%20is%3Amerged&sort=created&order=desc&per_page=50": {
+  "file": "a2fc12b0590eb407",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/search/issues?q=repo%3Arepalash%2Fthreepipe%20is%3Apr&sort=created&order=desc&per_page=50": {
+  "file": "9899018613873b83",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/pulls/193/comments?per_page=100&page=1": {
+  "file": "4767207c9af65bcb",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/pulls/193/reviews?per_page=100&page=1": {
+  "file": "0e6395d57d8755d7",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ },
+ "/repos/repalash/threepipe/issues/193/comments?per_page=100&page=1": {
+  "file": "5f40acee15c7f084",
+  "status": 200,
+  "type": "application/json; charset=utf-8"
+ }
+}

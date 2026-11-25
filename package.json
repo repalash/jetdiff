@@ -1,0 +1,17 @@
+{
+  "name": "jetdiff",
+  "private": true,
+  "description": "Code changes in an IDE-style side-by-side diff, on any device, online or offline.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "playwright test",
+    "record": "node tools/record-snapshot.cjs",
+    "pack": "python3 tools/make-pack.py",
+    "themes": "node tools/material-themes.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
