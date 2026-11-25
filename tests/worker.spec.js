@@ -66,8 +66,10 @@ test('sign-in: login, callback with the state, refresh from the cookie, logout',
 })
 
 test('sign-in only returns to a path on this site', async () => {
-    for (const bad of ['//evil.example/x', 'https://evil.example', '/\\evil.example']) {
+    for (const bad of ['//evil.example/x', 'https://evil.example', '/\\evil.example', '/\t/evil.example/', '/\t\\evil.example', '/\n/evil.example', 'https://jetdiff.com//evil.example', 'javascript:alert(1)']) {
         const login = await get('/auth/login?return=' + encodeURIComponent(bad))
         expect(decodeURIComponent(login.headers.get('set-cookie'))).toMatch(/jd_auth_state=[^|]+\|\/;/)
     }
+    const ok = await get('/auth/login?return=' + encodeURIComponent('/?pr=a/b/1&file=x'))
+    expect(decodeURIComponent(ok.headers.get('set-cookie'))).toContain('|/?pr=a/b/1&file=x;')
 })

@@ -17,8 +17,15 @@ function cookies(request) {
     return out
 }
 
-// only a path on this site, never another host (//evil.example)
-const safeReturn = (path) => path && path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\') ? path : '/'
+// only a path on this site: resolved as the browser will (it drops tabs and newlines, reads \ as /), never another host
+function safeReturn(path, origin) {
+    try {
+        const u = new URL(path || '/', origin)
+        return u.origin === origin && !u.pathname.startsWith('//') ? u.pathname + u.search : '/'
+    } catch {
+        return '/'
+    }
+}
 
 async function exchange(env, params) {
     const res = await fetch(`${GITHUB}/access_token`, {
@@ -50,7 +57,7 @@ export async function auth(request, env, url) {
         to.searchParams.set('redirect_uri', `${url.origin}/auth/callback`)
         to.searchParams.set('state', state)
         const headers = new Headers({location: to.href})
-        headers.append('set-cookie', cookie(STATE, `${state}|${safeReturn(url.searchParams.get('return'))}`, 600))
+        headers.append('set-cookie', cookie(STATE, `${state}|${safeReturn(url.searchParams.get('return'), url.origin)}`, 600))
         return new Response(null, {status: 302, headers})
     }
 
@@ -60,7 +67,7 @@ export async function auth(request, env, url) {
         const tokens = await exchange(env, {code: url.searchParams.get('code'), redirect_uri: `${url.origin}/auth/callback`})
         if (!tokens.access_token) return fail(`GitHub did not sign you in: ${tokens.error_description || tokens.error || 'no token'}`)
         const fragment = new URLSearchParams({'jd-auth': tokens.access_token, ...tokens.expires_in && {expires_in: tokens.expires_in}})
-        const headers = withTokens(new Headers({location: `${safeReturn(back)}#${fragment}`}), tokens)
+        const headers = withTokens(new Headers({location: `${safeReturn(back, url.origin)}#${fragment}`}), tokens)
         headers.append('set-cookie', cookie(STATE, '', 0))
         return new Response(null, {status: 302, headers})
     }
