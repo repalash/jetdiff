@@ -11,7 +11,7 @@ const SHELL_FILES = [
     './', './index.html', './style.css', './manifest.webmanifest',
     './js/main.js', './js/github.js', './js/editor.js', './js/themes.js', './js/sbs.js', './js/tree.js', './js/icons.js',
     './js/log.js', './js/palette.js', './js/markdown.js', './js/tooltip.js', './js/offline.js', './js/monaco-worker.js', './js/util.js',
-    './icons/icon.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
+    './icons/icon.svg', './icons/icon-small.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
 ]
 // libraries at fixed versions, fonts and avatars: they never change
 const LIB_HOSTS = new Set([

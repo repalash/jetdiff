@@ -1,4 +1,4 @@
-<p align="center"><img src="icons/icon.svg" width="88" alt=""></p>
+<p align="center"><picture><source media="(prefers-color-scheme: light)" srcset="icons/icon-light.svg"><img src="icons/icon.svg" width="88" alt=""></picture></p>
 
 <h1 align="center">jetdiff</h1>
 
