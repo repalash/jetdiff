@@ -1,0 +1,39 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+
+  # jetdiff.com: the Cloudflare Worker, deployed from main once the tests pass
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: deploy
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      APP_CLIENT_SECRET: ${{ secrets.APP_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "::notice::No CLOUDFLARE_API_TOKEN secret in this repository, so nothing is deployed"
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npm run deploy
+      # the GitHub App's client secret (Sign in with GitHub), when the repository has it
+      - if: env.CLOUDFLARE_API_TOKEN != '' && env.APP_CLIENT_SECRET != ''
+        run: printf '%s' "$APP_CLIENT_SECRET" | npx wrangler@4.158.0 secret put GITHUB_CLIENT_SECRET
