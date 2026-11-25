@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="jetdiff-tile" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#242D39"/>
+      <stop offset="1" stop-color="#151C25"/>
+    </linearGradient>
+    <linearGradient id="jetdiff-orange" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#FFAC53"/>
+      <stop offset="1" stop-color="#F98222"/>
+    </linearGradient>
+    <linearGradient id="jetdiff-blue" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#42B1FF"/>
+      <stop offset="1" stop-color="#117BEC"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="124" height="124" rx="29" fill="url(#jetdiff-tile)"
+        stroke="#3D4856" stroke-width="1"/>
+  <g fill="#374452">
+    <rect x="16" y="24" width="40" height="80" rx="8"/>
+    <rect x="72" y="24" width="40" height="80" rx="8"/>
+  </g>
+  <path d="M16 60H42C54 60 61 69 70 70V80H16Z" fill="url(#jetdiff-orange)"/>
+  <path d="M44 80C62 80 64 64 78 54C84 50 89 48 97 48H112V80Z" fill="url(#jetdiff-blue)"/>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="jetdiff-tile" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#242D39"/>
+      <stop offset="1" stop-color="#151C25"/>
+    </linearGradient>
+    <linearGradient id="jetdiff-orange" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#FFAC53"/>
+      <stop offset="1" stop-color="#F98222"/>
+    </linearGradient>
+    <linearGradient id="jetdiff-blue" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#42B1FF"/>
+      <stop offset="1" stop-color="#117BEC"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="124" height="124" rx="29" fill="url(#jetdiff-tile)"
+        stroke="#3D4856" stroke-width="1"/>
+  <g fill="#374452">
+    <rect x="16" y="16" width="42" height="96" rx="9"/>
+    <rect x="70" y="16" width="42" height="96" rx="9"/>
+  </g>
+  <path d="M26 31h18m-18 11h8m-8 54h17m36-65h19M79 96h18"
+        fill="none" stroke="#6B7A8B" stroke-width="5" stroke-linecap="round"/>
+  <path d="M16 60H38C52 60 56 71 70 72L67 79H16Z" fill="url(#jetdiff-orange)"/>
+  <path d="M43 79C63 79 66 62 79 51C86 45 92 43 101 43H112V79Z" fill="url(#jetdiff-blue)"/>
+  <path d="M43 79C63 79 66 62 79 51C81 49 84 47 87 46
+           C81 51 79 58 76 64C72 72 65 79 55 79Z"
+        fill="#0B55B8" opacity=".25"/>
+</svg>
