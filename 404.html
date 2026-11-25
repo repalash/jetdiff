@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <meta name="color-scheme" content="dark">
+    <title>jetdiff</title>
+    <script type="module">
+        // jetdiff.com/owner/repo/pull/1 (a GitHub link with the host swapped) opens as ?pr=owner/repo/1
+        import {parseTarget, targetToParams} from '/js/github.js'
+        const target = parseTarget('https://github.com' + location.pathname)
+        location.replace(target ? '/?' + targetToParams(target) : '/')
+    </script>
+</head>
+<body style="background: #212121"></body>
+</html>

@@ -95,3 +95,19 @@ test('a snapshot link opens recorded pull requests without a token, read-only', 
     await expect(page.locator('#tree .tr-file')).toHaveCount(5)
     await expect(page.locator('#btn-edit')).toBeHidden()
 })
+
+test('the start page opens a pasted GitHub URL', async ({page}) => {
+    await page.goto('./')
+    await expect(page.locator('.land-brand img')).toBeVisible()
+    await expect(page.locator('.land-chip')).toHaveCount(4)
+    await page.locator('#open-input').fill(`https://github.com/${PR.replace(/\/(\d+)$/, '/pull/$1')}/files`)
+    await page.locator('#open-form button').click()
+    await ready(page)
+    expect(new URL(page.url()).searchParams.get('pr')).toBe(PR)
+})
+
+test('a GitHub link with the host swapped opens the same pull request', async ({page}) => {
+    await page.goto(`./${PR.replace(/\/(\d+)$/, '/pull/$1')}/files`)
+    await ready(page)
+    expect(new URL(page.url()).searchParams.get('pr')).toBe(PR)
+})

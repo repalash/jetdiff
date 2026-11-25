@@ -4,3 +4,5 @@ packs/
 test-results/
 playwright-report/
 __pycache__/
+dist/
+.wrangler/

@@ -27,6 +27,9 @@ test('a pull request opened before works with no network', async ({page, context
     await ready(page)
     await expect(page.locator('#offline-pill')).toBeVisible()
     await expect(page.locator('.sbs-right .view-lines')).toBeVisible()
+    await page.goto(`./${PR.replace(/\/(\d+)$/, '/pull/$1')}`)
+    await ready(page)
+    expect(new URL(page.url()).searchParams.get('pr')).toBe(PR)
 })
 
 test('an offline pack imports, then opens with no network', async ({page, context}) => {

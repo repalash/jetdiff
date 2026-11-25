@@ -1,14 +1,14 @@
 // The page keeps file contents at a commit (jd-contents-v1), snapshot files from a URL (jd-snap) and packs (jd-pack)
 // itself; this worker keeps the app, its libraries and the GitHub API responses.
 
-const VERSION = 'v6'
+const VERSION = 'v7'
 const SHELL = 'jd-shell-' + VERSION
 const LIBS = 'jd-libs'
 const API = 'jd-api'
 const KEEP = [SHELL, LIBS, API, 'jd-contents-v1', 'jd-pack', 'jd-snap']
 
 const SHELL_FILES = [
-    './', './index.html', './style.css', './manifest.webmanifest',
+    './', './index.html', './404.html', './style.css', './manifest.webmanifest', './docs/hero.webp', './docs/phone.webp',
     './js/main.js', './js/github.js', './js/editor.js', './js/themes.js', './js/sbs.js', './js/tree.js', './js/icons.js',
     './js/log.js', './js/palette.js', './js/markdown.js', './js/tooltip.js', './js/offline.js', './js/monaco-worker.js', './js/util.js',
     './icons/icon.svg', './icons/icon-small.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
@@ -60,6 +60,8 @@ async function shell(req) {
     // only a good answer wins over the saved copy (a dead tunnel or proxy answers with an error page)
     if (first && first !== 'timeout' && first.ok) return first
     const hit = await cache.match(stripQuery(req)) || await cache.match(req, {ignoreSearch: true})
+        // a GitHub-style path (/owner/repo/pull/1): 404.html turns it into the app's URL
+        || req.mode === 'navigate' && await cache.match(new URL('./404.html', self.registration.scope).href)
     // a new Response keeps the requested URL (a saved one would carry the URL it was saved under)
     if (hit) return new Response(hit.body, {status: hit.status, statusText: hit.statusText, headers: hit.headers})
     return first && first !== 'timeout' ? first : net

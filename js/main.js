@@ -218,8 +218,17 @@ function labelForTarget(t) {
 const landItem = (href, label, title) => `
                 <a class="land-item" href="${esc(href)}"><span class="li-label">${label}</span><span class="li-title">${esc(title || '')}</span></a>`
 
+const TITLE = 'jetdiff · Code changes in an IDE-style side-by-side diff'
+const REPO_URL = 'https://github.com/repalash/jetdiff'
+const EXAMPLES = [
+    ['repalash/threepipe/203', 'TypeScript, GLSL'],
+    ['pmndrs/zustand/3592', 'TypeScript'],
+    ['charmbracelet/glow/922', 'Go'],
+    ['tokio-rs/tokio/8826', 'Rust'],
+]
+
 function showLanding(error) {
-    document.title = 'jetdiff'
+    document.title = TITLE
     $('#app').hidden = true
     const el = $('#landing')
     el.hidden = false
@@ -227,24 +236,44 @@ function showLanding(error) {
     const offline = offlineRepos()
     el.innerHTML = `
         <div class="land">
-            <div class="land-head">${icons.changes}<h1>jetdiff</h1></div>
-            <p class="dim">Code changes in an IDE-style side-by-side diff: a tree of the changed files, whole files with highlighting,
-            commits, the conversation and quick edits. On any device, online or offline.</p>
-            <form id="open-form" class="land-form">
-                <input id="open-input" placeholder="https://github.com/owner/repo/pull/123" autocomplete="off" spellcheck="false" autofocus>
-                <button class="btn btn-primary" type="submit">Open</button>
-            </form>
-            <p class="dim small">Also takes <code>owner/repo#123</code>, commit URLs and compare URLs (<code>…/compare/main...feature</code>).</p>
-            ${error ? `<div class="land-error">${esc(error)}</div>` : ''}
-            <div class="land-row">
-                <button class="btn btn-ghost" id="land-pack" title="An offline pack: a .zip of recorded pull requests (you can also drop it on this page)">${icons.download} Import offline pack (.zip)</button>
-                <button class="btn btn-ghost" id="land-token">${icons.lock} ${getToken() ? 'GitHub token saved: change' : 'Add a GitHub token (private repositories)'}</button>
+            <header class="land-top">
+                <a class="land-brand" href="./"><img src="./icons/icon.svg" alt="" width="36" height="36"><h1>jetdiff</h1></a>
+                <a class="btn btn-ghost" href="${REPO_URL}" target="_blank" rel="noopener">${icons.github} GitHub</a>
+            </header>
+            <div class="land-hero">
+                <div class="land-main">
+                    <p class="land-pitch">Code changes in an IDE-style side-by-side diff.</p>
+                    <p class="dim">Open a pull request, a commit or a compare from GitHub: a tree of the changed files, whole files
+                    with highlighting, the commits, the conversation and quick edits. On any device, online or offline.</p>
+                    <form id="open-form" class="land-form">
+                        <input id="open-input" placeholder="https://github.com/owner/repo/pull/123" autocomplete="off" spellcheck="false" autofocus>
+                        <button class="btn btn-primary" type="submit">Open</button>
+                    </form>
+                    <p class="dim small">Also takes <code>owner/repo#123</code>, commit URLs and compare URLs (<code>…/compare/main...feature</code>).</p>
+                    ${error ? `<div class="land-error">${esc(error)}</div>` : ''}
+                    <div class="land-examples"><span class="dim small">Try an example</span>${EXAMPLES.map(([pr, lang]) => {
+                        const [owner, repo, number] = pr.split('/')
+                        return `<a class="land-chip" href="${esc(prHref({owner, repo}, number))}">${esc(prKey({owner, repo}, number))}<span>${lang}</span></a>`
+                    }).join('')}</div>
+                    <div class="land-row">
+                        <button class="btn btn-ghost" id="land-pack" title="An offline pack: a .zip of recorded pull requests (you can also drop it on this page)">${icons.download} Import offline pack (.zip)</button>
+                        <button class="btn btn-ghost" id="land-token">${icons.lock} ${getToken() ? 'GitHub token saved: change' : 'Add a GitHub token (private repositories)'}</button>
+                    </div>
+                </div>
+                <picture class="land-shot">
+                    <source media="(max-width: 600px)" srcset="./docs/phone.webp" width="1170" height="1992">
+                    <img src="./docs/hero.webp" alt="A pull request in jetdiff: the changed files and a side-by-side diff" width="1920" height="1146">
+                </picture>
             </div>
-            ${offline.length ? `<h3>${icons.download} Available offline</h3><div class="land-list">${offline.map((r) => r.prs.map((p) =>
-                landItem(prHref(r, p.number), esc(prKey(r, p.number)), p.title)).join('')).join('')}</div>` : ''}
-            <div id="land-snap"></div>
-            <div id="land-mine"></div>
-            ${rec.length ? `<h3>Recent</h3><div class="land-list">${rec.map((r) => landItem('?' + r.key, esc(r.label), r.title)).join('')}</div>` : ''}
+            <div class="land-lists">
+                ${offline.length ? `<h3>${icons.download} Available offline</h3><div class="land-list">${offline.map((r) => r.prs.map((p) =>
+                    landItem(prHref(r, p.number), esc(prKey(r, p.number)), p.title)).join('')).join('')}</div>` : ''}
+                <div id="land-snap"></div>
+                <div id="land-mine"></div>
+                ${rec.length ? `<h3>Recent</h3><div class="land-list">${rec.map((r) => landItem('?' + r.key, esc(r.label), r.title)).join('')}</div>` : ''}
+            </div>
+            <footer class="land-foot dim small">Open source (MIT) on <a href="${REPO_URL}" target="_blank" rel="noopener">GitHub</a>.
+            Your token stays in this browser and goes only to GitHub.</footer>
         </div>`
     $('#open-form').onsubmit = (e) => {
         e.preventDefault()

@@ -46,6 +46,7 @@ Open `?pr=owner/repo/123`, or paste a pull request, commit or compare URL on the
 | `?pr=owner/repo/123` | a pull request |
 | `?pr=owner/repo/123&file=src/a.ts` | a pull request, at a file |
 | `?pr=owner/repo/123&commit=<sha>` | one commit of a pull request (`<sha1>..<sha2>` for a range) |
+| `jetdiff.com/owner/repo/pull/123` | a GitHub link with `github.com` replaced: pull requests, commits and compares |
 
 Keys: F7 and Shift+F7 move between differences, Alt+→ and Alt+← between files, V marks a file viewed, double Shift
 opens Search Everywhere, and Ctrl/⌘ with + − 0 sizes the editor font.
@@ -93,6 +94,13 @@ AGENTS.md describes the layout and the conventions. `js/themes.js` is generated 
 git clone --depth 1 https://github.com/AtomMaterialUI/material-theme-ui-lite /tmp/mtui
 npm run themes -- /tmp/mtui
 ```
+
+## Deploy
+
+[jetdiff.com](https://jetdiff.com) is a Cloudflare Worker with static assets (`wrangler.jsonc`, `worker/index.js`):
+`npm run build` copies the files the site serves into `dist/`, and `npm run deploy` builds and deploys them with
+wrangler. The Worker runs first on each request for request logs, the `www` redirect and a few security headers.
+Any static host works too: serve the files listed in `tools/build.mjs`, with `404.html` for missing paths.
 
 ## License
 
