@@ -148,7 +148,7 @@ export class FileTree {
                     : this.checks ? `<span class="tvd tck" title="${viewed ? 'Included in the commit' : 'Not included'}"><i class="tvd-box">${viewed ? icons.check : ''}</i></span>`
                         : `<span class="tvd" title="${viewed ? 'Viewed: click to unmark' : 'Mark as viewed'}"><i class="tvd-dot"></i><i class="tvd-box">${viewed ? icons.check : ''}</i></span>`
                 const edited = this.edited.has(f.path)
-                rows.push(`<div class="tr tr-file st-${f.status}${f.path === this.selected ? ' sel' : ''}${viewed ? ' viewed' : ''}${edited ? ' edited' : ''}" data-file="${esc(f.path)}" style="--d:${depth}" title="${esc(title)}${edited ? ' · edited here, not committed' : ''}">
+                rows.push(`<div class="tr tr-file st-${esc(f.status)}${f.path === this.selected ? ' sel' : ''}${viewed ? ' viewed' : ''}${edited ? ' edited' : ''}" data-file="${esc(f.path)}" style="--d:${depth}" title="${esc(title)}${edited ? ' · edited here, not committed' : ''}">
                     <span class="tw"></span>${this.checks ? slot : ''}${fileIcon(f.path)}<span class="tn">${esc(baseName(f.path))}</span>${edited ? '<span class="ted" title="Edited here, not committed"></span>' : ''}${this.checks ? '' : slot}
                 </div>`)
             }

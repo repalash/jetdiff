@@ -2,7 +2,7 @@ import {renderMarkdown} from './markdown.js'
 import {getCommitFiles} from './github.js'
 import {FileTree} from './tree.js'
 import {icons} from './icons.js'
-import {doubleClicks, esc, firstLine, plural, shortSha} from './util.js'
+import {doubleClicks, esc, firstLine, githubUrl, plural, shortSha} from './util.js'
 
 export function formatWhen(iso) {
     const d = new Date(iso)
@@ -143,7 +143,7 @@ export class LogView {
             details.innerHTML = `<div class="log-msg"><div class="log-subject">${esc(subject)}</div>${body ? `<pre class="log-body">${esc(body)}</pre>` : ''}${trailers ? `<div class="log-trailers">${trailers}</div>` : ''}</div>
                 <div><span class="log-sha">${shortSha(newer.sha)}</span> ${esc(c.author?.name || '')}${newer.author?.login ? ` <span class="dim">@${esc(newer.author.login)}</span>` : ''}
                 on ${esc(new Date(c.author?.date).toLocaleString())}</div>${committer}
-                <div><a href="${esc(newer.html_url)}" target="_blank" rel="noopener">Open Commit on GitHub</a></div>`
+                <div><a href="${esc(githubUrl(newer.html_url))}" target="_blank" rel="noopener">Open Commit on GitHub</a></div>`
         } else {
             details.innerHTML = `<div>${count} commits selected</div><div class="dim">${shortSha(older.sha)} … ${shortSha(newer.sha)}</div>`
         }

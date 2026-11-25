@@ -5,7 +5,7 @@ export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 export const baseName = (path) => path.split('/').pop()
 
-export const shortSha = (sha) => (sha || '').slice(0, 8)
+export const shortSha = (sha) => String(sha || '').replace(/[^0-9a-f]/gi, '').slice(0, 8)
 
 export const firstLine = (text) => text.split('\n')[0]
 
@@ -19,3 +19,6 @@ export function doubleClicks(ms = 450) {
         return dbl
     }
 }
+
+/** A link from loaded data (a snapshot or pack can hold anything): only to GitHub, never javascript: or another site. */
+export const githubUrl = (u) => /^https:\/\/github\.com\//.test(u || '') ? u : 'https://github.com/'

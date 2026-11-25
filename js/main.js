@@ -15,7 +15,7 @@ import {onDoubleShift, Palette} from './palette.js'
 import {installTooltips} from './tooltip.js'
 import {appOffline, clearOffline, downloadRepo, importPack, offlineRepos, removeRepo, storageUse} from './offline.js'
 import {highlightBlocks, renderMarkdown, repoResolvers, richSource, sanitize} from './markdown.js'
-import {baseName, esc, firstLine, plural, shortSha as short} from './util.js'
+import {baseName, esc, firstLine, githubUrl, plural, shortSha as short} from './util.js'
 
 const $ = (s, el = document) => el.querySelector(s)
 const cap = (s) => s[0].toUpperCase() + s.slice(1)
@@ -327,7 +327,7 @@ function showLanding(error) {
                 ${pack ? '' : `<button class="btn ${all ? '' : 'btn-primary'}" id="land-snap-go">${icons.download} ${all ? 'Update the download' : 'Download everything for offline'}</button>`}
             </div>
             ${repos.map((r) => `<h3>${esc(repoName(r))} <span class="dim">(${r.prs.length})</span></h3><div class="land-list">${r.prs.map((p) =>
-                landItem(prHref(r, p.number), `#${p.number}`, p.title)).join('')}</div>`).join('')}`
+                landItem(prHref(r, p.number), `#${esc(p.number)}`, p.title)).join('')}</div>`).join('')}`
         if ($('#land-snap-go')) $('#land-snap-go').onclick = () => offlineDialog({all: repos})
     })
     if (getToken()) {
@@ -742,10 +742,10 @@ async function loadPrList() {
         const prs = await listPullRequests(t.owner, t.repo, {state: state.prlState, text: $('#prl-search').value})
         if (id !== state.prlLoad) return
         list.innerHTML = prs.map((p) => `
-            <a class="prl-item${t.type === 'pr' && t.number === p.number ? ' sel' : ''}" data-n="${p.number}" href="${esc(prHref(t, p.number))}">
+            <a class="prl-item${t.type === 'pr' && t.number === p.number ? ' sel' : ''}" data-n="${esc(p.number)}" href="${esc(prHref(t, p.number))}">
                 <div class="prl-row"><span class="prl-title">${esc(p.title)}</span>${p.draft ? '<span class="prl-draft">DRAFT</span>' : ''}
-                    <span class="prl-com" title="Comments">${icons.comment}${p.comments}</span></div>
-                <div class="prl-meta">#${p.number} · created ${esc(dayOf(p.created))}, by ${esc(p.user || '')}${p.state !== 'open' ? ` · ${p.state}` : ''}</div>
+                    <span class="prl-com" title="Comments">${icons.comment}${esc(p.comments)}</span></div>
+                <div class="prl-meta">#${esc(p.number)} · created ${esc(dayOf(p.created))}, by ${esc(p.user || '')}${p.state !== 'open' ? ` · ${esc(p.state)}` : ''}</div>
             </a>`).join('') || '<div class="tree-msg dim">No pull requests</div>'
     } catch (e) {
         if (id === state.prlLoad) list.innerHTML = `<div class="tree-msg dim">${esc(e.message)}</div>`
@@ -771,7 +771,7 @@ function renderHeader() {
     $('#proj').title = `${repoName(target)}: recent and other pull requests`
     $('#branch').innerHTML = pr ? `${icons.branch}<span>${esc(pr.head.ref)}</span>` : ''
     $('#branch').title = pr ? `${pr.head.label} → ${pr.base.label}` : ''
-    $('#title').innerHTML = pr ? `<span class="dim">#${pr.number}</span> ${esc(cs.title)}` : esc(cs.title)
+    $('#title').innerHTML = pr ? `<span class="dim">#${esc(pr.number)}</span> ${esc(cs.title)}` : esc(cs.title)
     $('#title').title = cs.title
     const pill = $('#state-pill')
     if (pr) {
@@ -779,7 +779,7 @@ function renderHeader() {
         pill.textContent = cap(s)
         pill.className = `state-pill st-${s}`
     } else pill.className = 'state-pill hidden'
-    $('#btn-github').href = cs.htmlUrl + (fullPr(cs) ? '/files' : '')
+    $('#btn-github').href = githubUrl(cs.htmlUrl) + (fullPr(cs) ? '/files' : '')
     const range = cs.range && `${short(cs.range[0])}..${short(cs.range[1])}`
     $('#tab-log').hidden = !cs.commits?.length || !!state.closedTabs?.has('log')
     if (cs.commits?.length) {
@@ -799,8 +799,8 @@ function renderHeader() {
         if (state.tab === 'timeline') setTab('changes')
     }
     if (pr) {
-        $('#pr-title').innerHTML = `${esc(pr.title)} <span class="dim">#${pr.number}</span>`
-        $('#pr-link').href = pr.html_url
+        $('#pr-title').innerHTML = `${esc(pr.title)} <span class="dim">#${esc(pr.number)}</span>`
+        $('#pr-link').href = githubUrl(pr.html_url)
         $('#pr-commits').innerHTML = (range || (cs.commit ? `commit ${short(cs.headSha)}` : plural(cs.commits?.length || 0, 'commit'))) + icons.chevronDown
         $('#pr-clear').hidden = !(cs.commit || cs.range)
         $('#pr-branch').innerHTML = `${icons.tag}<span>${esc(pr.head.ref)}</span>`
@@ -929,7 +929,7 @@ function openOnGitHubItems() {
         // GitHub's anchor for a file in a diff is the SHA-256 of its path
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(f.path))
         const hash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-        if (w) w.location = `${fullPr(cs) ? `${cs.htmlUrl}/files` : cs.htmlUrl}#diff-${hash}`
+        if (w) w.location = `${githubUrl(cs.htmlUrl)}${fullPr(cs) ? '/files' : ''}#diff-${hash}`
     }})
     return items
 }
@@ -1123,7 +1123,7 @@ async function openFileAt(i, push = true, keepScroll = false) {
     $('#tab-label').title = f.path
     $('#file-pos').textContent = `${i + 1}/${state.order.length} files`
     $('#st-lang').innerHTML = `${fileIcon(f.path)}<span>${esc(languageName(languageForPath(f.path)))}</span>`
-    $('#st-stat').innerHTML = `<span class="add">+${f.additions}</span> <span class="del">−${f.deletions}</span>`
+    $('#st-stat').innerHTML = `<span class="add">+${esc(f.additions)}</span> <span class="del">−${esc(f.deletions)}</span>`
 
     renderViewed()
     state.editableFile = false
@@ -1499,7 +1499,7 @@ async function timelineHtml(cs, {comments, reviews, inline}, desc) {
     }
     const thread = (th) => {
         const line = th[0].line || th[0].original_line
-        return `<div class="tl-thread"><button class="tl-path" data-path="${esc(th[0].path)}">${fileIcon(th[0].path)}<span>${esc(th[0].path)}${line ? `:${line}` : ''}</span></button>
+        return `<div class="tl-thread"><button class="tl-path" data-path="${esc(th[0].path)}">${fileIcon(th[0].path)}<span>${esc(th[0].path)}${line ? `:${esc(line)}` : ''}</span></button>
                     ${hunk(th[0].diff_hunk)}
                     ${th.map((c) => `<div class="tl-reply"><div class="tl-meta">${who(c.user)} ${when(c.created_at)}</div><article class="md">${threadBodies.get(c.id)}</article></div>`).join('')}</div>`
     }
@@ -1517,7 +1517,7 @@ async function timelineHtml(cs, {comments, reviews, inline}, desc) {
             out += `<div class="tl-item tl-card"><div class="tl-meta">${who(e.c.user)} <span class="dim">commented</span> ${when(e.t)}</div>
                 <article class="md tl-body">${bodies[i]}</article></div>`
         } else {
-            const [label, cls] = REVIEW_STATES[e.c.state] || [e.c.state.toLowerCase(), '']
+            const [label, cls] = REVIEW_STATES[e.c.state] || [esc(String(e.c.state).toLowerCase()), '']
             out += `<div class="tl-item tl-card tl-review ${cls}"><div class="tl-meta">${who(e.c.user)} <span class="tl-state ${cls}">${label}</span> ${when(e.t)}</div>
                 ${bodies[i] ? `<article class="md tl-body">${bodies[i]}</article>` : ''}
                 ${e.roots.map(thread).join('')}</div>`
@@ -1525,13 +1525,13 @@ async function timelineHtml(cs, {comments, reviews, inline}, desc) {
     }
     const s = prState(pr)
     return `<div class="tl">
-        <header class="tl-head"><h1>${esc(pr.title)} <span class="dim">#${pr.number}</span></h1>
-            <div class="tl-sub"><span class="state-pill st-${s}">${cap(s)}</span>
+        <header class="tl-head"><h1>${esc(pr.title)} <span class="dim">#${esc(pr.number)}</span></h1>
+            <div class="tl-sub"><span class="state-pill st-${esc(s)}">${esc(cap(s))}</span>
             <span><b>${esc(pr.user?.login || '')}</b> ${pr.merged_at ? 'merged' : 'wants to merge'} ${plural(cs.commits?.length || 0, 'commit')} into <code>${esc(pr.base.ref)}</code> from <code>${esc(pr.head.label)}</code></span></div></header>
         <div class="tl-item tl-card tl-desc"><div class="tl-meta">${who(pr.user)} <span class="dim">opened this pull request</span> ${when(pr.created_at)}</div>
             <article class="md tl-body">${desc || '<p class="dim">No description provided.</p>'}</article></div>
         ${out}
-        <div class="tl-end dim">${plural(comments.length, 'comment')} · ${plural(reviewCount(reviews), 'review')} · <a href="${esc(pr.html_url)}" target="_blank" rel="noopener">Open PR on GitHub</a></div>
+        <div class="tl-end dim">${plural(comments.length, 'comment')} · ${plural(reviewCount(reviews), 'review')} · <a href="${esc(githubUrl(pr.html_url))}" target="_blank" rel="noopener">Open PR on GitHub</a></div>
     </div>`
 }
 

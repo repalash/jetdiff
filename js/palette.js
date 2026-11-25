@@ -188,7 +188,7 @@ export class Palette {
             for (const r of g.rows) {
                 const i = this.rows.push(r) - 1
                 const hint = r.toggle !== undefined ? `<span class="pal-toggle${r.toggle ? ' on' : ''}">${r.toggle ? 'ON' : 'OFF'}</span>` : r.hint ? `<span class="pal-hint">${esc(r.hint)}</span>` : ''
-                html += `<div class="pal-row ${r.cls || ''}" data-i="${i}">${r.icon || '<span class="fi"></span>'}<span class="pal-label">${highlight(r.label, r.hits)}</span>${r.sub ? `<span class="pal-sub">${esc(r.sub)}</span>` : ''}${hint}</div>`
+                html += `<div class="pal-row ${esc(r.cls || '')}" data-i="${i}">${r.icon || '<span class="fi"></span>'}<span class="pal-label">${highlight(r.label, r.hits)}</span>${r.sub ? `<span class="pal-sub">${esc(r.sub)}</span>` : ''}${hint}</div>`
             }
             if (this.tab === 'all' && g.more > 0) html += `<div class="pal-more" data-tab-link="${esc(g.key)}">${g.more} more…</div>`
         }
