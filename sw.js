@@ -35,7 +35,8 @@ self.addEventListener('fetch', (e) => {
     if (req.method !== 'GET') return
     const url = new URL(req.url)
     if (url.origin === location.origin) {
-        if (url.pathname.startsWith(new URL('./', self.registration.scope).pathname)) e.respondWith(shell(req))
+        const scope = new URL('./', self.registration.scope).pathname
+        if (url.pathname.startsWith(scope) && !url.pathname.startsWith(scope + 'auth/')) e.respondWith(shell(req))
     } else if (url.host === 'api.github.com') {
         // raw file contents are cached by the page
         if (!(req.headers.get('accept') || '').includes('raw')) e.respondWith(api(req))

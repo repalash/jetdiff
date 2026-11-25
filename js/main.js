@@ -1,5 +1,5 @@
 import {
-    commitFiles, getFileContent, getPullHead, getTimeline, getViewer, moveBranch, getToken, getViewedStates, GitHubError, loadChangeSet,
+    authConfig, commitFiles, getFileContent, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
     paramsToTarget, parseTarget, listPullRequests, packMemory, searchMyPullRequests, setFileViewed, setToken, snapshotName, snapshotRepos,
     targetToParams,
 } from './github.js'
@@ -174,24 +174,43 @@ function showError(el, message) {
 
 function tokenDialog() {
     const has = !!getToken()
+    const viaApp = signedIn()
     const dlg = openDialog(`
         <form class="dlg" method="dialog">
-            <h2>GitHub token</h2>
-            <p>Needed for private repositories and to sync the <b>Viewed</b> checkboxes with GitHub. It is kept in this
-            browser's storage only and sent only to <code>api.github.com</code>.</p>
+            <h2>GitHub access</h2>
+            <p>Needed for private repositories, to commit edits and to sync the <b>Viewed</b> checkboxes with GitHub. The
+            token is kept in this browser's storage only and sent only to <code>api.github.com</code>.</p>
+            <div id="tok-app" class="tok-app" hidden>
+                ${viaApp ? `<p>${icons.check} Signed in with GitHub. The token renews itself.</p>`
+                    : '<button type="button" id="tok-signin" class="btn btn-primary">Sign in with GitHub</button>'}
+                <p class="dim small">Sign-in sees the repositories where the jetdiff app is
+                <a id="tok-install" target="_blank" rel="noopener">installed</a>. Or paste a token instead:</p>
+            </div>
             <p class="dim">Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>
             with <i>Contents: read</i> and <i>Pull requests: read and write</i> (write is only for Viewed) on the repositories you review,
-            or a <a href="https://github.com/settings/tokens/new?scopes=repo&description=PR%20diff%20viewer" target="_blank" rel="noopener">classic token</a> with <code>repo</code>.</p>
+            or a <a href="https://github.com/settings/tokens/new?scopes=repo&description=jetdiff" target="_blank" rel="noopener">classic token</a> with <code>repo</code>.</p>
             <input type="password" id="tok" placeholder="${has ? 'A token is saved. Paste a new one to replace it' : 'github_pat_… or ghp_…'}" autocomplete="off" spellcheck="false">
             <div class="dlg-actions">
-                ${has ? '<button type="button" id="tok-clear" class="btn btn-ghost">Remove token</button>' : ''}
+                ${has ? `<button type="button" id="tok-clear" class="btn btn-ghost">${viaApp ? 'Sign out' : 'Remove token'}</button>` : ''}
                 <span class="spacer"></span>
                 <button type="button" id="tok-cancel" class="btn btn-ghost">Cancel</button>
                 <button type="submit" class="btn btn-primary">Save</button>
             </div>
         </form>`, {focus: '#tok', cancel: '#tok-cancel'})
+    authConfig().then((cfg) => {
+        if (!cfg) return
+        $('#tok-app', dlg).hidden = false
+        $('#tok-install', dlg).href = `https://github.com/apps/${cfg.appSlug}/installations/new`
+        const go = $('#tok-signin', dlg)
+        if (go) go.onclick = signIn
+    })
     const clear = $('#tok-clear', dlg)
-    if (clear) clear.onclick = () => { setToken(''); dlg.close(); toast('Token removed'); reloadTarget() }
+    if (clear) clear.onclick = async () => {
+        await signOut()
+        dlg.close()
+        toast(viaApp ? 'Signed out' : 'Token removed')
+        reloadTarget()
+    }
     $('form', dlg).onsubmit = (e) => {
         e.preventDefault()
         const v = $('#tok', dlg).value.trim()
@@ -222,7 +241,7 @@ const TITLE = 'jetdiff · Code changes in an IDE-style side-by-side diff'
 const REPO_URL = 'https://github.com/repalash/jetdiff'
 const EXAMPLES = [
     ['repalash/threepipe/203', 'TypeScript, GLSL'],
-    ['pmndrs/zustand/3592', 'TypeScript'],
+    ['microsoft/vscode/350405', 'TypeScript, a big repository'],
     ['charmbracelet/glow/922', 'Go'],
     ['tokio-rs/tokio/8826', 'Rust'],
 ]
@@ -257,7 +276,9 @@ function showLanding(error) {
                     }).join('')}</div>
                     <div class="land-row">
                         <button class="btn btn-ghost" id="land-pack" title="An offline pack: a .zip of recorded pull requests (you can also drop it on this page)">${icons.download} Import offline pack (.zip)</button>
-                        <button class="btn btn-ghost" id="land-token">${icons.lock} ${getToken() ? 'GitHub token saved: change' : 'Add a GitHub token (private repositories)'}</button>
+                        <button class="btn btn-ghost" id="land-signin" hidden>${icons.github} Sign in with GitHub</button>
+                        <button class="btn btn-ghost" id="land-token">${icons.lock} ${signedIn() ? 'Signed in with GitHub'
+                            : getToken() ? 'GitHub token saved: change' : 'Add a GitHub token (private repositories)'}</button>
                     </div>
                 </div>
                 <picture class="land-shot">
@@ -282,6 +303,12 @@ function showLanding(error) {
         navigate(t)
     }
     $('#land-token').onclick = tokenDialog
+    if (!getToken()) authConfig().then((cfg) => {
+        const go = $('#land-signin')
+        if (!cfg || !go) return
+        go.hidden = false
+        go.onclick = signIn
+    })
     $('#land-pack').onclick = () => pickPack()
     snapshotRepos().then((repos) => {
         if (!repos?.length || !$('#land-snap')) return
@@ -861,7 +888,7 @@ function appMenu(anchor) {
         {label: 'Reset Font Size', hint: `${MOD}0`, action: () => changeFont(0)},
         '-',
         {html: 'GitHub'},
-        {label: `${icons.lock} ${getToken() ? 'Token saved: change or remove…' : 'Add a Token…'}`, action: tokenDialog},
+        {label: `${icons.lock} ${signedIn() ? 'Signed in with GitHub…' : getToken() ? 'Token saved: change or remove…' : 'Sign In or Add a Token…'}`, action: tokenDialog},
         OPEN_ANOTHER_ITEM,
         {label: `${icons.download} Offline: Download and Saved Data…`, action: offlineDialog},
         '-',
@@ -2302,7 +2329,7 @@ function actionItems() {
         ...openOnGitHubItems().map((it) => A(it.label.replace(/<[^>]+>/g, '').replace(/^\s+/, ''), it.action, {ic: icons.external})),
         A('Reload', () => reloadTarget(), {ic: icons.refresh}),
         ...THEMES.map((th) => A(`Theme: ${th.name}`, () => setThemeId(th.id), {toggle: s.theme === th.id, sub: th.dark ? 'dark' : 'light'})),
-        A('GitHub Token…', tokenDialog, {ic: icons.lock}),
+        A('GitHub Access: Sign In or Token…', tokenDialog, {ic: icons.lock}),
         A('Start Page', () => go(location.pathname), {ic: icons.folder}),
     ].filter(Boolean)
 }
@@ -2348,4 +2375,5 @@ installTooltips()
 // a sandboxed page has no service worker: even reading navigator.serviceWorker throws there
 try { navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('No offline app', e)) } catch { /* no offline app here */ }
 window.addEventListener('popstate', () => route())
+if (takeSignInToken()) getViewer().then((me) => toast(`Signed in to GitHub as ${me.login}`)).catch(() => {})
 route()

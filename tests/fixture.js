@@ -38,7 +38,7 @@ export const test = base.extend({
                 return url.pathname === '/graphql' ? json({data: null}) : json({message: 'Not mocked'}, 501)
             }
             for (const h of github.handlers) {
-                const out = h({method: 'GET', path: url.pathname + url.search})
+                const out = h({method: 'GET', path: url.pathname + url.search, headers: req.headers()})
                 if (out) return json(out)
             }
             const key = Object.entries(github.alias).reduce((k, [from, to]) => k.replaceAll(from, to), url.pathname + url.search)

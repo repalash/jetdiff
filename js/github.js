@@ -3,6 +3,8 @@ import {firstLine} from './util.js'
 const API = 'https://api.github.com'
 const FULL = 'application/vnd.github.full+json' // bodies also as GitHub's rendered HTML (body_html)
 const TOKEN_KEY = 'jd.token'
+const EXPIRES_KEY = 'jd.tokenExpires' // set for a token from Sign in with GitHub: it expires, and renews itself
+const AUTH = new URL('../auth/', import.meta.url)
 const SNAP_KEY = 'jd.snap'
 const SNAP_NAME = SNAP_KEY + '='
 
@@ -14,9 +16,62 @@ export function getToken() {
     try { return localStorage.getItem(TOKEN_KEY) || '' } catch { return '' }
 }
 
-export function setToken(token) {
-    try { token ? localStorage.setItem(TOKEN_KEY, token.trim()) : localStorage.removeItem(TOKEN_KEY) } catch { /* no storage */ }
+/** A pasted token (no expiry), or one from Sign in with GitHub (`expiresIn` seconds). */
+export function setToken(token, expiresIn = 0) {
+    try {
+        token ? localStorage.setItem(TOKEN_KEY, token.trim()) : localStorage.removeItem(TOKEN_KEY)
+        token && expiresIn ? localStorage.setItem(EXPIRES_KEY, String(Date.now() + expiresIn * 1000)) : localStorage.removeItem(EXPIRES_KEY)
+    } catch { /* no storage */ }
 }
+
+const tokenExpires = () => { try { return +localStorage.getItem(EXPIRES_KEY) || 0 } catch { return 0 } }
+
+/** Whether the token came from Sign in with GitHub. */
+export const signedIn = () => !!getToken() && !!tokenExpires()
+
+let authConfigPromise
+/** {clientId, appSlug} where this site offers Sign in with GitHub, else null. */
+export function authConfig() {
+    authConfigPromise ??= SNAP ? Promise.resolve(null)
+        : fetch(new URL('config', AUTH)).then((r) => r.ok && r.headers.get('content-type')?.includes('json') ? r.json() : null).catch(() => null)
+    return authConfigPromise
+}
+
+export function signIn() {
+    location.assign(`${new URL('login', AUTH)}?return=${encodeURIComponent(location.pathname + location.search)}`)
+}
+
+export async function signOut() {
+    setToken('')
+    await fetch(new URL('logout', AUTH), {method: 'POST'}).catch(() => {})
+}
+
+/** Takes the token Sign in with GitHub left in the URL fragment; true if there was one. */
+export function takeSignInToken() {
+    const params = new URLSearchParams(location.hash.slice(1))
+    const token = params.get('jd-auth')
+    if (!token) return false
+    setToken(token, +params.get('expires_in') || 0)
+    history.replaceState(history.state, '', location.pathname + location.search)
+    return true
+}
+
+let refreshing
+function renewToken() {
+    refreshing ??= fetch(new URL('refresh', AUTH), {method: 'POST'})
+        .then(async (r) => {
+            if (!r.ok) throw new Error()
+            const {access_token, expires_in} = await r.json()
+            setToken(access_token, expires_in)
+            return access_token
+        })
+        .catch(() => { setToken(''); return '' })
+        .finally(() => { refreshing = null })
+    return refreshing
+}
+
+// a signed-in token is renewed a minute before it expires
+const currentToken = () => tokenExpires() && tokenExpires() - Date.now() < 60000 && getToken() ? renewToken() : getToken()
 
 export class GitHubError extends Error {
     constructor(message, status) {
@@ -119,10 +174,17 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
         return res
     }
     const headers = {Accept: accept}
-    const token = getToken()
+    let token = await currentToken()
     if (token) headers.Authorization = `Bearer ${token}`
     if (body) headers['Content-Type'] = 'application/json'
-    const res = await fetch(url, {method, headers, body: body && JSON.stringify(body)})
+    const send = () => fetch(url, {method, headers, body: body && JSON.stringify(body)})
+    let res = await send()
+    if (res.status === 401 && signedIn()) {
+        token = await renewToken()
+        if (token) headers.Authorization = `Bearer ${token}`
+        else delete headers.Authorization
+        res = await send()
+    }
     if (res.headers.get('x-jd-offline')) window.dispatchEvent(new CustomEvent('jd-offline'))
     if (!res.ok) {
         let message = res.statusText || `HTTP ${res.status}`
@@ -131,6 +193,8 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
         if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0')
             message = 'GitHub API rate limit reached' + (token ? '' : '. Add a GitHub token for a higher limit.')
         if (res.status === 401) message = 'GitHub refused the token (401). Check or replace it.'
+        const app = signedIn() && (res.status === 403 || res.status === 404) && (await authConfig())?.appSlug
+        if (app) message += ` If jetdiff is not installed on this repository, install it: https://github.com/apps/${app}/installations/new`
         throw new GitHubError(message, res.status)
     }
     return res

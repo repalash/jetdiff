@@ -13,5 +13,7 @@
         {"pattern": "jetdiff.com", "custom_domain": true},
         {"pattern": "www.jetdiff.com", "custom_domain": true}
     ],
-    "observability": {"enabled": true}
+    "observability": {"enabled": true},
+    // GITHUB_CLIENT_ID, GITHUB_APP_SLUG and the GITHUB_CLIENT_SECRET secret are set in the Cloudflare dashboard
+    "keep_vars": true
 }

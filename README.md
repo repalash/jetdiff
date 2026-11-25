@@ -32,7 +32,7 @@ step and no server of its own: it talks to the GitHub API from the browser.
 | ![GLSL](docs/glsl.webp) GLSL (threepipe) | ![TSX](docs/tsx.webp) TSX (shader-flow-editor) |
 | ![Rust](docs/rust.webp) Rust ([fd](https://github.com/sharkdp/fd)) | ![Go](docs/go.webp) Go ([glow](https://github.com/charmbracelet/glow)) |
 | ![Python](docs/python.webp) Python ([click](https://github.com/pallets/click)) | ![C++](docs/cpp.webp) C++ ([fmt](https://github.com/fmtlib/fmt)) |
-| ![Ruby](docs/ruby.webp) Ruby ([Sinatra](https://github.com/sinatra/sinatra)) | ![TypeScript](docs/typescript.webp) TypeScript ([zustand](https://github.com/pmndrs/zustand)) |
+| ![Ruby](docs/ruby.webp) Ruby ([Sinatra](https://github.com/sinatra/sinatra)) | ![TypeScript](docs/typescript.webp) TypeScript ([VS Code](https://github.com/microsoft/vscode)) |
 | ![Lua](docs/lua.webp) Lua ([lazy.nvim](https://github.com/folke/lazy.nvim)) | ![Material Lighter theme](docs/light.webp) Material Lighter theme |
 
 <p align="center"><img src="docs/phone.webp" width="300" alt="jetdiff on a phone"></p>
@@ -53,8 +53,9 @@ opens Search Everywhere, and Ctrl/⌘ with + − 0 sizes the editor font.
 
 ### GitHub access
 
-Public repositories work without a token (GitHub allows 60 requests an hour without one). For private repositories
-and a higher limit, add a token in the settings (the gear in the title bar): a fine-grained token with *Contents:
+Public repositories work without signing in (GitHub allows 60 requests an hour then). For private repositories, a
+higher limit and commits, either **Sign in with GitHub** (on jetdiff.com: it sees the repositories where the jetdiff
+app is installed, and its token renews itself), or paste a token in the settings (the gear in the title bar): a fine-grained token with *Contents:
 read* and *Pull requests: read and write* (write is only for Viewed), and *Contents: read and write* to commit edits;
 or a classic token with `repo`. The token stays in the browser's storage and is sent only to `api.github.com`.
 
@@ -101,6 +102,12 @@ npm run themes -- /tmp/mtui
 `npm run build` copies the files the site serves into `dist/`, and `npm run deploy` builds and deploys them with
 wrangler. The Worker runs first on each request for request logs, the `www` redirect and a few security headers.
 Any static host works too: serve the files listed in `tools/build.mjs`, with `404.html` for missing paths.
+
+Sign in with GitHub needs the Worker and a GitHub App (`worker/auth.js`): create the app with the callback URL
+`https://<your domain>/auth/callback`, *Expire user authorization tokens* on, no webhook, and the repository
+permissions *Contents: read and write*, *Pull requests: read and write* and *Metadata: read*. Then set the Worker's
+variables `GITHUB_CLIENT_ID` and `GITHUB_APP_SLUG` and the secret `GITHUB_CLIENT_SECRET`. Without them the site
+offers token pasting only.
 
 ## License
 
