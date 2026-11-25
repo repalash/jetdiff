@@ -1,12 +1,14 @@
 import {
-    CONTENTS_CACHE, getFileContent, getTimeline, listOpenPulls, listPullRequests, loadChangeSet, PACK_CACHE, packMemory,
-    packUrl, setSnapshot, SNAP_CACHE,
+    CONTENTS_CACHE, forgetLoaded, getFileContent, getTimeline, listOpenPulls, listPullRequests, loadChangeSet, PACK_CACHE,
+    packMemory, packUrl, setSnapshot, snapshotName, SNAP_CACHE, STORAGE_FULL,
 } from './github.js'
 import {languageForPath, loadMonaco, preloadForOffline} from './editor.js'
 import {loadMarkdown} from './markdown.js'
 
 const KEY = 'jd.offline'
 const API_CACHE = 'jd-api' // kept by sw.js
+// what "Remove all saved data" removes
+const SAVED = [API_CACHE, CONTENTS_CACHE, PACK_CACHE, SNAP_CACHE]
 const FFLATE = 'https://esm.sh/fflate@0.8.2'
 const LANGUAGES = ['markdown', 'typescript', 'javascript', 'json', 'css', 'html', 'glsl', 'yaml', 'shellscript']
 
@@ -49,90 +51,143 @@ async function preloadApp(languages) {
     await Promise.all([preloadForOffline(monaco, languages), loadMarkdown(), cacheFonts()])
 }
 
-/** Downloads a repository's open pull requests (or `numbers`) for offline use. Returns {prs, failed, aborted?}. */
-export async function downloadRepo(owner, repo, {numbers = null, commits = true, onProgress = () => {}, signal} = {}) {
+const keepStorage = async () => {
     try { await navigator.storage?.persist?.() } catch { /* the browser decides */ }
-    let done = 0, total = 1
-    const tick = (step) => { done++; onProgress({done, total, step}) }
-    onProgress({done, total, step: 'Pull request lists'})
-    const lists = {}
-    for (const state of ['open', 'closed', 'merged', 'all']) lists[state] = await listPullRequests(owner, repo, {state}).catch(() => [])
-    // the search lists stop at 50
-    const prs = numbers ? lists.all.filter((p) => numbers.includes(p.number)) : await listOpenPulls(owner, repo).catch(() => lists.open)
-    for (const n of numbers || []) if (!prs.some((p) => p.number === n)) prs.push({number: n, title: `#${n}`})
-    tick('Pull request lists')
+}
 
-    const sets = []
-    total += prs.length
-    let failed = await pool(prs.map((p) => async () => {
-        const cs = await loadChangeSet({type: 'pr', owner, repo, number: p.number})
-        p.title = cs.title
-        sets.push({cs, commits: commits ? (cs.commits || []).map((c) => c.sha) : []})
-    }), 3, () => tick('Pull requests'), signal)
-
-    const contents = (cs) => cs.files.flatMap((f) => [
-        f.status !== 'added' && cs.baseSha ? () => getFileContent(owner, repo, cs.baseSha, f.prevPath || f.path) : null,
-        f.status !== 'removed' ? () => getFileContent(owner, repo, cs.headSha, f.path) : null,
-    ]).filter(Boolean)
-    const tasks = []
-    const languages = new Set()
-    for (const {cs, commits: shas} of sets) {
-        for (const f of cs.files) languages.add(languageForPath(f.path))
-        tasks.push(...contents(cs), async () => {
-            // the timeline shows its people's pictures
-            const tl = await getTimeline(owner, repo, cs.pr.number)
-            const users = [cs.pr.user, ...(cs.commits || []).map((c) => c.author), ...tl.comments.map((c) => c.user), ...tl.reviews.map((r) => r.user), ...tl.inline.map((c) => c.user)]
-            const urls = new Set(users.filter((u) => u?.avatar_url).map((u) => `${u.avatar_url}${u.avatar_url.includes('?') ? '&' : '?'}s=48`))
-            await Promise.all([...urls].map((u) => fetch(u, {mode: 'no-cors'}).catch(() => {})))
-        })
-        for (const sha of shas) {
-            tasks.push(async () => {
-                const more = contents(await loadChangeSet({type: 'pr', owner, repo, number: cs.pr.number, commit: sha}))
-                tasks.push(...more)
-                total += more.length
-            })
+/**
+ * Downloads a repository's open pull requests (or `numbers`) for offline use. Returns {prs, failed, aborted?, full?}:
+ * `prs` counts the pull requests saved, which are then listed as available offline; `full`: the storage is full, and
+ * the download stopped.
+ */
+export async function downloadRepo(owner, repo, {numbers = null, commits = true, onProgress = () => {}, signal} = {}) {
+    await keepStorage()
+    // stopped by the user (`signal`) or by a full storage
+    const ctl = new AbortController()
+    const stop = () => ctl.abort()
+    if (signal?.aborted) stop()
+    signal?.addEventListener('abort', stop)
+    // the pull requests with work under way or waiting: not saved once the storage is full
+    const pending = new Map(), spoiled = new Set()
+    let full = false
+    const onFull = () => {
+        full = true
+        for (const [n, k] of pending) if (k > 0) spoiled.add(n)
+        stop()
+    }
+    window.addEventListener(STORAGE_FULL, onFull)
+    const task = (n, fn) => {
+        pending.set(n, (pending.get(n) || 0) + 1)
+        return async () => {
+            try { await fn() } finally { pending.set(n, pending.get(n) - 1) }
         }
     }
-    total += tasks.length
-    failed += await pool(tasks, 6, () => tick('Files and conversations'), signal)
-    if (signal?.aborted) return {prs: 0, failed, aborted: true}
+    try {
+        const opts = {signal: ctl.signal}
+        let done = 0, total = 1
+        const tick = (step) => { done++; onProgress({done, total, step}) }
+        onProgress({done, total, step: 'Pull request lists'})
+        const lists = {}
+        for (const state of ['open', 'closed', 'merged', 'all']) lists[state] = await listPullRequests(owner, repo, {state, ...opts}).catch(() => [])
+        // the search lists stop at 50
+        const prs = numbers ? lists.all.filter((p) => numbers.includes(p.number)) : await listOpenPulls(owner, repo, opts).catch(() => lists.open)
+        for (const n of numbers || []) if (!prs.some((p) => p.number === n)) prs.push({number: n, title: `#${n}`})
+        tick('Pull request lists')
 
-    total += 1
-    try { await preloadApp([...languages, ...LANGUAGES]) } catch { failed++ }
-    tick('Editor and languages')
+        const sets = []
+        total += prs.length
+        let failed = await pool(prs.map((p) => task(p.number, async () => {
+            const cs = await loadChangeSet({type: 'pr', owner, repo, number: p.number}, opts)
+            p.title = cs.title
+            sets.push({cs, commits: commits ? (cs.commits || []).map((c) => c.sha) : []})
+        })), 3, () => tick('Pull requests'), ctl.signal)
 
-    const saved = offlineRepos()
-    const merged = new Map((saved.find((r) => sameRepo(r, {owner, repo}))?.prs || []).map((p) => [p.number, p]))
-    for (const p of prs) merged.set(p.number, {number: p.number, title: p.title})
-    saveRepos([
-        {owner, repo, prs: [...merged.values()].sort((a, b) => b.number - a.number), commits, at: Date.now()},
-        ...saved.filter((r) => !sameRepo(r, {owner, repo})),
-    ])
-    return {prs: prs.length, failed}
+        const contents = (cs) => cs.files.flatMap((f) => [
+            f.status !== 'added' && cs.baseSha ? () => getFileContent(owner, repo, cs.baseSha, f.prevPath || f.path, opts) : null,
+            f.status !== 'removed' ? () => getFileContent(owner, repo, cs.headSha, f.path, opts) : null,
+        ]).filter(Boolean).map((fn) => task(cs.pr.number, fn))
+        const tasks = []
+        const languages = new Set()
+        for (const {cs, commits: shas} of sets) {
+            for (const f of cs.files) languages.add(languageForPath(f.path))
+            tasks.push(...contents(cs), task(cs.pr.number, async () => {
+                // the timeline shows its people's pictures (avatars allow CORS: an opaque answer would cost ~7 MB of quota)
+                const tl = await getTimeline(owner, repo, cs.pr.number, opts)
+                const users = [cs.pr.user, ...(cs.commits || []).map((c) => c.author), ...tl.comments.map((c) => c.user), ...tl.reviews.map((r) => r.user), ...tl.inline.map((c) => c.user)]
+                const urls = new Set(users.filter((u) => u?.avatar_url).map((u) => `${u.avatar_url}${u.avatar_url.includes('?') ? '&' : '?'}s=48`))
+                await Promise.all([...urls].map((u) => fetch(u, {mode: 'cors', ...opts}).catch(() => {})))
+            }))
+            for (const sha of shas) {
+                tasks.push(task(cs.pr.number, async () => {
+                    const more = contents(await loadChangeSet({type: 'pr', owner, repo, number: cs.pr.number, commit: sha}, opts))
+                    tasks.push(...more)
+                    total += more.length
+                }))
+            }
+        }
+        total += tasks.length
+        failed += await pool(tasks, 6, () => tick('Files and conversations'), ctl.signal)
+        if (signal?.aborted) return {prs: 0, failed, aborted: true}
+
+        if (!full) {
+            total += 1
+            try { await preloadApp([...languages, ...LANGUAGES]) } catch { failed++ }
+            tick('Editor and languages')
+        }
+
+        // only the pull requests whose changes loaded, and whose files were all kept
+        const saved = sets.map(({cs}) => cs.pr).filter((pr) => !spoiled.has(pr.number))
+        const list = offlineRepos()
+        const merged = new Map((list.find((r) => sameRepo(r, {owner, repo}))?.prs || []).map((p) => [p.number, p]))
+        for (const pr of saved) merged.set(pr.number, {number: pr.number, title: pr.title})
+        if (merged.size) {
+            saveRepos([
+                {owner, repo, prs: [...merged.values()].sort((a, b) => b.number - a.number), commits, at: Date.now()},
+                ...list.filter((r) => !sameRepo(r, {owner, repo})),
+            ])
+        }
+        return {prs: saved.length, failed, ...(full && {full})}
+    } finally {
+        signal?.removeEventListener('abort', stop)
+        window.removeEventListener(STORAGE_FULL, onFull)
+    }
 }
 
 /** Removes a repository's saved responses and contents. */
 export async function removeRepo(owner, repo) {
-    const path = `/repos/${owner}/${repo}/`
-    const q = encodeURIComponent(`repo:${owner}/${repo}`).toLowerCase()
-    for (const name of [API_CACHE, CONTENTS_CACHE]) {
-        const cache = await caches.open(name)
-        for (const req of await cache.keys()) {
-            const u = decodeURIComponent(req.url)
-            if (u.includes(path) || req.url.toLowerCase().includes(q) || u.includes(`repo:${owner}/${repo}`)) await cache.delete(req)
+    const re = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // its API paths and its searches (`repo:owner/name`), not those of a repository whose name starts the same
+    const ours = new RegExp(`(?:/repos/|repo:)${re(owner)}/${re(repo)}(?![\\w.-])`, 'i')
+    const decode = (u) => { try { return decodeURIComponent(u) } catch { return u } }
+    try {
+        for (const name of [API_CACHE, CONTENTS_CACHE]) {
+            const cache = await caches.open(name)
+            for (const req of await cache.keys()) if (ours.test(decode(req.url))) await cache.delete(req)
         }
-    }
+    } catch { /* a sandboxed page has no Cache Storage */ }
+    forgetLoaded(owner, repo)
     saveRepos(offlineRepos().filter((r) => !sameRepo(r, {owner, repo})))
 }
 
 /** Removes all saved GitHub data (not the app itself). */
 export async function clearOffline() {
     try {
-        for (const name of [API_CACHE, CONTENTS_CACHE, PACK_CACHE, SNAP_CACHE]) await caches.delete(name)
+        for (const name of SAVED) await caches.delete(name)
     } catch { /* a sandboxed page has no Cache Storage */ }
     packMemory.clear()
+    // what this tab read is read again: a download right after must save it
+    forgetLoaded()
     setSnapshot('')
     saveRepos([])
+}
+
+/** Whether clearOffline has anything to remove: downloads, packs, and what browsing or a stopped download kept. */
+export async function hasSavedData() {
+    if (offlineRepos().length || packMemory.size || snapshotName() === 'pack') return true
+    try {
+        for (const name of SAVED) if (await caches.has(name)) return true
+    } catch { /* a sandboxed page has no Cache Storage */ }
+    return false
 }
 
 /** {usage, quota} in bytes, when the browser tells. */
@@ -150,6 +205,7 @@ export function appOffline() {
  * Returns {repos, files, persisted}: not persisted where the page has no Cache Storage (kept until the tab closes).
  */
 export async function importPack(file, onProgress = () => {}) {
+    await keepStorage()
     const {unzip, unzipSync} = await import(FFLATE)
     const buf = new Uint8Array(await file.arrayBuffer())
     onProgress('Unpacking', 0, 1)

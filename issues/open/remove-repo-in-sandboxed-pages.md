@@ -1,3 +1,5 @@
-# Removing a downloaded repository fails in sandboxed pages, and keeps its pack data
+# Removing a downloaded repository keeps its pack data
 
-`removeRepo` (js/offline.js) opens Cache Storage without a try/catch, so it throws where there is none (a sandboxed page). It also leaves the repository's files in `jd-pack`, `jd-snap` and the in-memory packs.
+`removeRepo` (js/offline.js) removes the repository's saved API responses and file contents (and works where the page
+has no Cache Storage), but leaves its files in `jd-pack`, `jd-snap` and the in-memory packs, so an imported pack of it
+still opens.

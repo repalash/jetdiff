@@ -137,13 +137,22 @@ const NO_MARKS = /^\s*(?:```|~~~|\|?\s*:?-{3,}:?\s*(\||$))/
 // link addresses, autolinks, bare URLs and HTML tags: a mark inside one would change the address, so it moves past it
 const PROTECTED = /\]\([^)\s]*(?:\s+"[^"]*")?\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|https?:\/\/[^\s<>()\]]+|<\/?[a-z][^>]*>/gi
 
+// character references (&amp; &#169; &#x1F600;): a mark inside one would show it as text, so it takes the whole of it
+const ENTITY = /&(?:[a-z][a-z0-9]{1,31}|#[0-9]{1,7}|#x[0-9a-f]{1,6});/gi
+const isEnd = (t) => t === INS_E || t === DEL_E
+
 // inserts: [col, text] pairs, 0-based columns
 function insertAt(line, inserts) {
     if (!inserts.length || NO_MARKS.test(line)) return line
     const min = line.match(SYNTAX)[0].length
     const guard = [...line.matchAll(PROTECTED)].map((m) => [m.index + (m[0].startsWith('](') ? 2 : 0), m.index + m[0].length])
-    const place = (c) => { for (const [a, b] of guard) if (c > a && c < b) return b; return c }
-    const at = inserts.map(([c, t], i) => [place(Math.max(min, Math.min(line.length, c))), t, i]).sort((a, b) => b[0] - a[0] || b[2] - a[2])
+    const entities = [...line.matchAll(ENTITY)].map((m) => [m.index, m.index + m[0].length])
+    const place = (c, t) => {
+        for (const [a, b] of guard) if (c > a && c < b) return b
+        for (const [a, b] of entities) if (c > a && c < b) return isEnd(t) ? b : a
+        return c
+    }
+    const at = inserts.map(([c, t], i) => [place(Math.max(min, Math.min(line.length, c)), t), t, i]).sort((a, b) => b[0] - a[0] || b[2] - a[2])
     for (const [c, t] of at) line = line.slice(0, c) + t + line.slice(c)
     return line
 }

@@ -1,5 +1,5 @@
 import {
-    authConfig, commitFiles, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
+    authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
     paramsToTarget, parseTarget, listPullRequests, packMemory, searchMyPullRequests, setFileViewed, setToken, snapshotName, snapshotRepos,
     targetToParams,
 } from './github.js'
@@ -13,7 +13,7 @@ import {fileIcon, icons, isImagePath} from './icons.js'
 import {formatWhen, LogView} from './log.js'
 import {onDoubleShift, Palette} from './palette.js'
 import {installTooltips} from './tooltip.js'
-import {appOffline, clearOffline, downloadRepo, importPack, offlineRepos, removeRepo, storageUse} from './offline.js'
+import {appOffline, clearOffline, downloadRepo, hasSavedData, importPack, offlineRepos, removeRepo, storageUse} from './offline.js'
 import {highlightBlocks, renderMarkdown, repoResolvers, richSource, sanitize} from './markdown.js'
 import {baseName, esc, firstLine, githubUrl, plural, shortSha as short} from './util.js'
 
@@ -231,7 +231,7 @@ function addRecent(target, title) {
 function labelForTarget(t) {
     if (t.type === 'pr') return prKey(t)
     if (t.type === 'commit') return `${repoName(t)}@${short(t.sha)}`
-    return `${repoName(t)} ${t.base}...${t.head}`
+    return `${repoName(t)} ${t.base}${compareDots(t)}${t.head}`
 }
 
 /** `label` is HTML; `title` is text. */
@@ -416,6 +416,8 @@ async function openTarget(target, file) {
     const id = ++state.loadId
     state.target = target
     state.ready = false
+    state.offlineCopy = false
+    renderOffline()
     renderCommitPanel(false)
     $('#landing').hidden = true
     $('#app').hidden = false
@@ -452,6 +454,7 @@ async function openTarget(target, file) {
         state.closedTabs = new Set()
     }
     renderEdits()
+    changeSetNotices(cs)
     addRecent(target, cs.title)
     document.title = `${cs.title} · ${labelForTarget(target)}`
     renderHeader()
@@ -465,6 +468,14 @@ async function openTarget(target, file) {
     }
     const start = file ? state.order.findIndex((f) => f.path === file) : 0
     await openFileAt(start >= 0 ? start : 0, false)
+}
+
+/** What the change set leaves out, said once per load. */
+function changeSetNotices(cs) {
+    if (cs.noMergeBase) toast(`GitHub did not give the merge base: the diff is against the tip of ${cs.pr.base.ref}, not where the pull request branched off, so it can show changes made on ${cs.pr.base.ref} since`, 'error', 12000)
+    const n = cs.incomplete
+    if (n) toast(n.total ? `Showing ${n.shown} of ${n.total} changed files: GitHub lists at most ${n.limit}`
+        : `The list of files may be incomplete: GitHub lists at most ${n.limit}`, 'error', 12000)
 }
 
 async function ensureMonaco() {
@@ -915,7 +926,7 @@ function appMenu(anchor) {
 function openOnGitHubItems() {
     const f = currentFile(), cs = state.cs, t = state.target
     if (!f || !cs) return []
-    const blob = (sha, path) => () => window.open(`https://github.com/${t.owner}/${t.repo}/blob/${sha}/${path}`, '_blank', 'noopener')
+    const blob = (sha, path) => () => window.open(`https://github.com/${t.owner}/${t.repo}/blob/${sha}/${path.split('/').map(encodeURIComponent).join('/')}`, '_blank', 'noopener')
     const items = []
     if (f.status !== 'removed') {
         items.push({label: `${icons.external} Open New Version on GitHub <span class="dim">${short(cs.headSha)}</span>`, action: blob(cs.headSha, f.path)})
@@ -1095,15 +1106,15 @@ async function contentOf(ref, path) {
     return getFileContent(state.target.owner, state.target.repo, ref, path)
 }
 
-/** The line changes of a file; an added or removed file is one change. */
-async function fileChanges(f, original, modified) {
+/** The line changes of a file; an added or removed file is one change. Null once `stale()` (a newer load started). */
+async function fileChanges(f, original, modified, stale) {
     if (f.status === 'added') {
         return [{originalStartLineNumber: 0, originalEndLineNumber: 0, modifiedStartLineNumber: 1, modifiedEndLineNumber: modified.getLineCount()}]
     }
     if (f.status === 'removed') {
         return [{originalStartLineNumber: 1, originalEndLineNumber: original.getLineCount(), modifiedStartLineNumber: 0, modifiedEndLineNumber: 0}]
     }
-    return computeDiff(original, modified)
+    return computeDiff(original, modified, stale)
 }
 
 async function openFileAt(i, push = true, keepScroll = false) {
@@ -1123,10 +1134,11 @@ async function openFileAt(i, push = true, keepScroll = false) {
     $('#tab-label').title = f.path
     $('#file-pos').textContent = `${i + 1}/${state.order.length} files`
     $('#st-lang').innerHTML = `${fileIcon(f.path)}<span>${esc(languageName(languageForPath(f.path)))}</span>`
-    $('#st-stat').innerHTML = `<span class="add">+${esc(f.additions)}</span> <span class="del">−${esc(f.deletions)}</span>`
+    $('#st-stat').innerHTML = `<span class="add">+${esc(f.additions ?? '?')}</span> <span class="del">−${esc(f.deletions ?? '?')}</span>`
 
     renderViewed()
     state.editableFile = false
+    state.tooLarge = false
     applyEditable()
     updateToolbar()
     setLoading(true)
@@ -1183,14 +1195,15 @@ async function openFileAt(i, push = true, keepScroll = false) {
     $('#seg-md').hidden = !isMarkdown(f.path)
     $('#btn-md-preview').classList.toggle('on', preview)
     $('#btn-md-code').classList.toggle('on', !preview)
+    const stale = () => id !== state.fileLoadId
     try {
         if (preview) {
-            const changes = await fileChanges(f, original, modified)
+            const changes = await fileChanges(f, original, modified, stale)
             if (id !== state.fileLoadId) return
             state.unified?.setModel(null)
             if (!await showMarkdownPreview(f, original.getValue(), modified.getValue(), changes, labels, id, keepScroll)) return
         } else if (renderer() === 'sbs') {
-            const changes = await fileChanges(f, original, modified)
+            const changes = await fileChanges(f, original, modified, stale)
             if (id !== state.fileLoadId) return
             showView('sbs')
             state.unified?.setModel(null)
@@ -1207,10 +1220,16 @@ async function openFileAt(i, push = true, keepScroll = false) {
             de.updateOptions(monacoOptions())
             const updated = waitForDiff(de)
             de.setModel({original, modified})
-            await updated
+            if (!await updated) throw new DiffTooLarge()
             if (id !== state.fileLoadId) return
             if (!keepScroll && de.getLineChanges()?.length) de.revealFirstDiff?.()
         }
+    } catch (e) {
+        if (!(e instanceof DiffTooLarge)) throw e
+        if (id !== state.fileLoadId) return
+        setLoading(false)
+        state.tooLarge = true
+        return showMessage(`The diff of ${esc(f.path)} is too large to compute<div class="dim small">No result in ${(DIFF_TIME + DIFF_GRACE) / 1000} s</div>`)
     } finally {
         old.forEach((m) => setTimeout(() => m.dispose(), 0))
     }
@@ -1263,7 +1282,9 @@ async function showMarkdownPreview(f, oldText, newText, lineChanges, labels, id,
         return r
     }
     const sides = f.status === 'removed' ? ['old'] : f.status !== 'added' && viewMode() === 'sbs' ? ['old', 'new'] : ['new']
-    const unified = sides.length === 1 && f.status === 'modified'
+    // a renamed, copied or changed file has removed text too
+    const both = f.status !== 'added' && f.status !== 'removed'
+    const unified = sides.length === 1 && both
     const scroll = keepScroll ? $('#view-md .mdp-pane:last-child .mdp-body')?.scrollTop : 0
     let html
     try {
@@ -1287,7 +1308,7 @@ async function showMarkdownPreview(f, oldText, newText, lineChanges, labels, id,
     }
     if (id !== state.fileLoadId) return false
     const view = $('#view-md')
-    const legend = f.status !== 'modified' ? `<span class="mdp-legend">${f.status === 'added' ? 'New file' : 'Deleted file'}</span>`
+    const legend = !both ? `<span class="mdp-legend">${f.status === 'added' ? 'New file' : 'Deleted file'}</span>`
         : '<span class="mdp-legend" title="Blocks: a bar and tint on the left. Words: highlighted inside the text.">'
             + '<i class="lg-ins"></i>added <i class="lg-mod"></i>changed <i class="lg-del"></i>removed'
             + (sides.length > 1 ? '' : ' (struck through)') + '</span>'
@@ -1299,7 +1320,7 @@ async function showMarkdownPreview(f, oldText, newText, lineChanges, labels, id,
     state.mdMarks = mdStops(main, lineChanges, f)
     state.mdCur = -1
     if (scroll) main.scrollTop = scroll
-    else if (state.mdMarks.length && f.status === 'modified') markCurrent(0, false)
+    else if (state.mdMarks.length && both) markCurrent(0, false)
     const bodies = [...view.querySelectorAll('.mdp-body')]
     state.mdRefresh = null
     state.mdObserver?.disconnect()
@@ -1467,7 +1488,7 @@ const REVIEW_STATES = {
 async function timelineHtml(cs, {comments, reviews, inline}, desc) {
     const pr = cs.pr
     const who = (u, name) => u
-        ? `<img class="tl-av" src="${esc(u.avatar_url)}${u.avatar_url?.includes('?') ? '&' : '?'}s=48" alt="" loading="lazy"><b>${esc(u.login)}</b>`
+        ? `<img class="tl-av" src="${esc(u.avatar_url)}${u.avatar_url?.includes('?') ? '&' : '?'}s=48" alt="" loading="lazy" crossorigin="anonymous"><b>${esc(u.login)}</b>`
         : `<span class="tl-av tl-av-none"></span><b>${esc(name || 'ghost')}</b>`
     const when = (iso) => `<span class="dim" title="${esc(new Date(iso).toLocaleString())}">${esc(formatWhen(iso))}</span>`
     const ev = []
@@ -1535,18 +1556,19 @@ async function timelineHtml(cs, {comments, reviews, inline}, desc) {
     </div>`
 }
 
-let lastOfflineCopy = 0
-window.addEventListener('jd-offline', () => { lastOfflineCopy = Date.now(); renderOffline() })
+// a saved copy answered for the view shown (each load starts afresh)
+window.addEventListener('jd-offline', () => { state.offlineCopy = true; renderOffline() })
 window.addEventListener('online', () => renderOffline())
 window.addEventListener('offline', () => renderOffline())
 function renderOffline() {
     const pill = $('#offline-pill')
     if (!pill) return
-    pill.hidden = navigator.onLine && Date.now() - lastOfflineCopy > 60000
+    pill.hidden = navigator.onLine && !state.offlineCopy
 }
 
 const mb = (b) => b == null ? '?' : b > 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${(b / 1e6).toFixed(b > 1e7 ? 0 : 1)} MB`
 const failedNote = (n) => n ? ` (${plural(n, 'item')} failed)` : ''
+const FULL_NOTE = 'The storage of this device is full: the download stopped. Remove saved data or free space, then download again.'
 
 async function offlineDialog({all = null} = {}) {
     const dlg = $('#dialog')
@@ -1554,7 +1576,7 @@ async function offlineDialog({all = null} = {}) {
     const snap = all || await snapshotRepos()
     const render = async () => {
         const repos = offlineRepos()
-        const use = await storageUse()
+        const [use, saved] = await Promise.all([storageUse(), hasSavedData()])
         const here = t && !repos.some((r) => r.owner === t.owner && r.repo === t.repo)
         dlg.innerHTML = `
             <form class="dlg dlg-wide" method="dialog">
@@ -1581,7 +1603,7 @@ async function offlineDialog({all = null} = {}) {
                 <div class="off-progress" id="off-progress" hidden><div class="off-bar"><i></i></div><span class="dim small" id="off-step"></span></div>
                 <p class="dim small">${use ? `Storage used: ${mb(use.usage)} of ${mb(use.quota)}.` : ''} On iPhone and iPad, add the page to the Home Screen (Share → Add to Home Screen) so the saved data stays; Safari may clear the data of sites not opened for a few weeks.</p>
                 <div class="dlg-actions">
-                    <button type="button" class="btn btn-ghost" id="off-clear" ${repos.length ? '' : 'disabled'}>Remove all saved data</button>
+                    <button type="button" class="btn btn-ghost" id="off-clear" ${saved ? '' : 'disabled'}>Remove all saved data</button>
                     <span class="spacer"></span>
                     <button type="button" class="btn" id="off-close">Close</button>
                 </div>
@@ -1622,18 +1644,20 @@ async function offlineDialog({all = null} = {}) {
     const runAll = async (list) => {
         const ctl = begin()
         if (!ctl) return
-        let prs = 0, failed = 0
+        let prs = 0, failed = 0, full = false
         try {
             for (const [i, r] of list.entries()) {
-                if (ctl.signal.aborted) break
+                if (ctl.signal.aborted || full) break
                 const res = await downloadRepo(r.owner, r.repo, {
                     numbers: r.prs.map((p) => p.number), commits: true, signal: ctl.signal,
                     onProgress: ({done, total, step}) => progress((i + done / Math.max(1, total)) / list.length, `${r.repo} (${i + 1} of ${list.length}): ${step} · ${done} / ${total}`),
                 })
                 prs += res.prs
                 failed += res.failed
+                full ||= !!res.full
             }
-            toast(ctl.signal.aborted ? 'Download stopped' : `${prs} pull requests saved for offline${failedNote(failed)}`, failed ? 'error' : 'info', 8000)
+            if (full) toast(`${FULL_NOTE} ${prs} pull requests were saved.`, 'error', 15000)
+            else toast(ctl.signal.aborted ? 'Download stopped' : `${prs} pull requests saved for offline${failedNote(failed)}`, failed ? 'error' : 'info', 8000)
         } catch (e) {
             toast(`Download failed: ${e.message}`, 'error', 8000)
         }
@@ -1649,7 +1673,8 @@ async function offlineDialog({all = null} = {}) {
                 numbers, commits, signal: ctl.signal,
                 onProgress: ({done, total, step}) => progress(done / Math.max(1, total), `${step} · ${done} / ${total}`),
             })
-            toast(r.aborted ? 'Download stopped' : `${owner}/${repo}: ${plural(r.prs, 'pull request')} saved for offline${failedNote(r.failed)}`, r.failed ? 'error' : 'info', 6000)
+            if (r.full) toast(`${FULL_NOTE} ${owner}/${repo}: ${plural(r.prs, 'pull request')} saved.`, 'error', 15000)
+            else toast(r.aborted ? 'Download stopped' : `${owner}/${repo}: ${plural(r.prs, 'pull request')} saved for offline${failedNote(r.failed)}`, r.failed ? 'error' : 'info', 6000)
         } catch (e) {
             toast(`Download failed: ${e.message}`, 'error', 8000)
         }
@@ -1735,7 +1760,7 @@ async function loadPacks(files) {
         return persisted
     } catch (e) {
         t.remove()
-        toast(`Could not import: ${e.message}`, 'error', 8000)
+        toast(`Could not import: ${e?.name === 'QuotaExceededError' ? 'the storage of this device is full' : e.message}`, 'error', 8000)
     }
 }
 
@@ -1808,9 +1833,10 @@ function onEdited(f, original, modified, id) {
     // the side-by-side viewer's bands follow the edit (Monaco's diff editor updates on its own)
     clearTimeout(editTimer)
     editTimer = setTimeout(async () => {
-        if (id !== state.fileLoadId || modified.isDisposed() || renderer() !== 'sbs' || !state.sbs) return
-        const changes = await fileChanges(f, original, modified)
-        if (id !== state.fileLoadId || modified.isDisposed()) return
+        const stale = () => id !== state.fileLoadId || modified.isDisposed()
+        if (stale() || renderer() !== 'sbs' || !state.sbs) return
+        const changes = await fileChanges(f, original, modified, stale).catch((e) => { if (e instanceof DiffTooLarge) return null; throw e })
+        if (!changes || stale()) return
         state.sbs.updateChanges(changes)
         updateToolbar()
     }, 300)
@@ -2193,22 +2219,41 @@ function prefetch(i) {
     if (f.status !== 'removed') contentOf(cs.headSha, f.path).catch(() => {})
 }
 
-/** Resolves on the diff editor's next diff, or after 15 s. */
+// Monaco's time for one diff: past it, it gives a coarser diff
+const DIFF_TIME = 20000
+// and no answer at all this much later is a diff too large to compute
+const DIFF_GRACE = 10000
+
+class DiffTooLarge extends Error {}
+
+/** Resolves true on the diff editor's next diff, false when none came in time. */
 function waitForDiff(de) {
     return new Promise((resolve) => {
-        const d = de.onDidUpdateDiff(() => { d.dispose(); clearTimeout(t); resolve() })
-        const t = setTimeout(() => { d.dispose(); resolve() }, 15000)
+        const d = de.onDidUpdateDiff(() => { d.dispose(); clearTimeout(t); resolve(true) })
+        const t = setTimeout(() => { d.dispose(); resolve(false) }, DIFF_TIME + DIFF_GRACE)
     })
 }
 
-/** Line changes from Monaco's diff algorithm (VS Code's), computed by a diff editor that is never shown. */
-async function computeDiff(original, modified) {
+// one diff at a time: the hidden diff editor holds one pair of models
+let diffQueue = Promise.resolve()
+
+/**
+ * Line changes from Monaco's diff algorithm (VS Code's), computed by a diff editor that is never shown; null once
+ * `stale()`. Throws DiffTooLarge when Monaco gives no answer.
+ */
+function computeDiff(original, modified, stale = () => false) {
+    const run = diffQueue.then(() => stale() || original.isDisposed() || modified.isDisposed() ? null : diffNow(original, modified))
+    diffQueue = run.catch(() => {})
+    return run
+}
+
+async function diffNow(original, modified) {
     const monaco = state.monaco
     if (!state.differ) {
         const host = document.createElement('div')
         host.style.cssText = 'position:absolute;left:-10000px;top:0;width:800px;height:400px;visibility:hidden'
         document.body.appendChild(host)
-        state.differ = monaco.editor.createDiffEditor(host, {readOnly: true, renderSideBySide: true, maxComputationTime: 20000, automaticLayout: false})
+        state.differ = monaco.editor.createDiffEditor(host, {readOnly: true, renderSideBySide: true, maxComputationTime: DIFF_TIME, automaticLayout: false})
     }
     const de = state.differ
     de.updateOptions({ignoreTrimWhitespace: settings.ignore === 'trim'})
@@ -2221,14 +2266,15 @@ async function computeDiff(original, modified) {
     }
     const updated = waitForDiff(de)
     de.setModel({original: a, modified: b})
-    await updated
-    const changes = de.getLineChanges() || []
+    const ok = await updated
+    const changes = ok ? de.getLineChanges() || [] : null
     de.setModel(null) // models are disposed when the next file opens; a diff editor must not hold them then
     if (a !== original) {
         a.dispose()
         b.dispose()
-        changes.forEach((c) => { c.charChanges = undefined })
+        changes?.forEach((c) => { c.charChanges = undefined })
     }
+    if (!changes) throw new DiffTooLarge()
     return changes
 }
 
@@ -2379,7 +2425,7 @@ function updateToolbar() {
     const d = diffInfo()
     const loading = $('#loading-bar').classList.contains('on')
     const first = state.index <= 0, last = state.index >= state.order.length - 1
-    $('#diff-count').textContent = loading ? '' : d.count === 0 ? 'No differences' : plural(d.count, 'difference')
+    $('#diff-count').textContent = loading ? '' : state.tooLarge ? 'Too large to compare' : d.count === 0 ? 'No differences' : plural(d.count, 'difference')
     $('#btn-prev-diff').disabled = !d.prev && first
     $('#btn-next-diff').disabled = !d.next && last
     $('#btn-prev-file').disabled = first

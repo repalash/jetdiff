@@ -143,7 +143,7 @@ export class FileTree {
             }
             for (const f of node.files) {
                 const viewed = this.viewed.has(f.path)
-                const title = `${STATUS_LABEL[f.status] || f.status}: ${f.prevPath ? f.prevPath + ' → ' : ''}${f.path}  (+${f.additions} −${f.deletions})`
+                const title = `${STATUS_LABEL[f.status] || f.status}: ${f.prevPath ? f.prevPath + ' → ' : ''}${f.path}  (+${f.additions ?? '?'} −${f.deletions ?? '?'})`
                 const slot = !this.onToggleViewed ? ''
                     : this.checks ? `<span class="tvd tck" title="${viewed ? 'Included in the commit' : 'Not included'}"><i class="tvd-box">${viewed ? icons.check : ''}</i></span>`
                         : `<span class="tvd" title="${viewed ? 'Viewed: click to unmark' : 'Mark as viewed'}"><i class="tvd-dot"></i><i class="tvd-box">${viewed ? icons.check : ''}</i></span>`

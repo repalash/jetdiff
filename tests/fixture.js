@@ -58,6 +58,35 @@ export const test = base.extend({
     },
 })
 
+/** A made-up 40-character sha whose first 8 characters are `n` in hex. */
+export const fakeSha = (n) => n.toString(16).padStart(8, '0').padEnd(40, 'e')
+const segments = (path) => path.split('/').map(encodeURIComponent).join('/')
+
+/**
+ * A made-up pull request `number` of repalash/threepipe, answered by `github.handle`. `files`: [{filename, status?,
+ * previous_filename?, old?, new?}], `old` and `new` the text at the base and at the head. `pr` overrides the PR's fields.
+ * Returns {base, head, url}.
+ */
+export function fakePr(github, number, files, pr = {}) {
+    const R = '/repos/repalash/threepipe'
+    const base = fakeSha(0xba5e), head = fakeSha(0xbead)
+    const tpl = recorded(`${R}/pulls/193`)
+    github.handle(({method, path}) => {
+        if (method !== 'GET') return
+        if (path === `${R}/pulls/${number}`) return {...tpl, number, title: 'A made-up pull request', state: 'open', changed_files: files.length,
+            head: {...tpl.head, sha: head}, base: {...tpl.base, sha: base}, ...pr}
+        if (path.startsWith(`${R}/pulls/${number}/commits?`)) return [{sha: head, parents: [{sha: base}], author: null, html_url: `https://github.com${R}/commit/${head}`,
+            commit: {message: 'Change', author: {name: 'A', date: '2026-01-01T00:00:00Z'}, committer: {name: 'A', date: '2026-01-01T00:00:00Z'}}}]
+        if (path.startsWith(`${R}/pulls/${number}/files?`)) return files.map((f) => ({status: 'modified', additions: 1, deletions: 1, sha: fakeSha(1), ...f, old: undefined, new: undefined}))
+        if (path === `${R}/compare/${base}...${head}?per_page=1`) return {merge_base_commit: {sha: base}, base_commit: {sha: base}}
+        for (const f of files) {
+            if (path === `${R}/contents/${segments(f.previous_filename || f.filename)}?ref=${base}`) return {raw: f.old ?? ''}
+            if (path === `${R}/contents/${segments(f.filename)}?ref=${head}`) return {raw: f.new ?? ''}
+        }
+    })
+    return {base, head, url: `./?pr=repalash/threepipe/${number}`}
+}
+
 /** Waits until the change set is loaded and a file's diff is shown. */
 export async function ready(page) {
     await expect(page.locator('#diff-count')).not.toBeEmpty({timeout: 30000})

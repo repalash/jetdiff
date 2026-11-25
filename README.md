@@ -46,7 +46,11 @@ Open `?pr=owner/repo/123`, or paste a pull request, commit or compare URL on the
 | `?pr=owner/repo/123` | a pull request |
 | `?pr=owner/repo/123&file=src/a.ts` | a pull request, at a file |
 | `?pr=owner/repo/123&commit=<sha>` | one commit of a pull request (`<sha1>..<sha2>` for a range) |
-| `jetdiff.com/owner/repo/pull/123` | a GitHub link with `github.com` replaced: pull requests, commits and compares |
+| `?compare=owner/repo/main...feature` | a compare from where `feature` branched off `main`; with `..`, the two tips directly |
+| `jetdiff.com/owner/repo/pull/123` | a GitHub link with `github.com` replaced: pull requests (also `…/files/<sha1>..<sha2>`), commits and compares |
+
+GitHub lists at most 3000 files of a pull request or a commit, and 300 of a compare: a notice says when a list is cut
+short, and when the merge base could not be read (the diff is then against the base branch's tip).
 
 Keys: F7 and Shift+F7 move between differences, Alt+→ and Alt+← between files, V marks a file viewed, double Shift
 opens Search Everywhere, and Ctrl/⌘ with + − 0 sizes the editor font.
@@ -63,7 +67,8 @@ or a classic token with `repo`. The token stays in the browser's storage and is 
 
 Once loaded, the app opens with no network, and every pull request opened before shows from the saved copy. To get a
 whole repository ready, use *Download for offline* (settings → Offline): it saves each open pull request with its
-commits, file contents and conversation. Edits and Viewed marks made offline stay on the device. Saved data belongs
+commits, file contents and conversation. Only the pull requests saved whole are listed as available offline: a full
+storage stops the download and says so. Edits and Viewed marks made offline stay on the device. Saved data belongs
 to the address the app was opened from.
 
 ### Snapshots and offline packs
