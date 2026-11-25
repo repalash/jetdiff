@@ -265,14 +265,14 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .toast.out { opacity: 0; }
 
 #landing { height: 100%; overflow: auto; }
-.land { max-width: 1160px; margin: 0 auto; padding: 28px 24px 40px; display: flex; flex-direction: column; gap: 14px; min-height: 100%; box-sizing: border-box; }
+.land { max-width: 1880px; margin: 0 auto; padding: 28px 24px 40px; display: flex; flex-direction: column; gap: 14px; min-height: 100%; box-sizing: border-box; }
 .land-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .land-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
 .land h1 { margin: 0; font-size: 22px; color: var(--fg-strong); font-weight: 600; }
 .land h3 { margin: 18px 0 2px; font-size: 13px; color: var(--fg-dim); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
-.land-hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 48px; align-items: center; padding: max(24px, 6vh) 0 12px; }
+.land-hero { display: grid; grid-template-columns: minmax(340px, clamp(440px, 30vw, 620px)) minmax(0, 1fr); gap: clamp(32px, 4vw, 80px); align-items: center; padding: max(24px, 4vh) 0 12px; flex: 1; }
 .land-main { display: flex; flex-direction: column; gap: 14px; }
-.land-pitch { font-size: 30px; line-height: 1.2; font-weight: 600; color: var(--fg-strong); letter-spacing: -.01em; }
+.land-pitch { font-size: clamp(26px, 1vw + 16px, 42px); line-height: 1.2; font-weight: 600; color: var(--fg-strong); letter-spacing: -.01em; }
 .land-shot img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 18px 50px rgba(0, 0, 0, .35); }
 a.btn { text-decoration: none; }
 .land-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
@@ -392,7 +392,7 @@ a.btn { text-decoration: none; }
 .pr-link:hover { text-decoration: underline; }
 .pr-from { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-weight: 600; color: var(--fg-strong); min-width: 0; white-space: nowrap; }
 .pr-commits, .pr-branch { display: inline-flex; align-items: center; gap: 3px; color: var(--accent); font-weight: 400; min-width: 0; }
-.pr-commits { border: 0; background: none; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.pr-commits { border: 0; background: none; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; flex-shrink: 0; }
 .pr-commits .ic { width: 13px; height: 13px; color: var(--fg); }
 .pr-branch { overflow: hidden; }
 .pr-branch span { overflow: hidden; text-overflow: ellipsis; }
