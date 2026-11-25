@@ -14,10 +14,19 @@ test('edits a file, commits it to the pull request branch, and undoes the commit
         if (path === '/repos/repalash/threepipe/pulls/193') return {...pr, state: 'open', head: {...pr.head, sha: head}}
         if (method === 'GET' && path.includes('/git/ref/')) return {object: {sha: head}}
         if (method === 'GET' && path.includes('/git/commits/')) return {sha: head, tree: {sha: 'tree0'}, parents: [{sha: 'parent0'}], author: {name: 'A', email: 'a@example.com', date: '2026-01-01T00:00:00Z'}}
-        if (method === 'GET' && path.includes('/git/trees/')) return {tree: []}
+        if (method === 'GET' && path.includes('/git/trees/')) return {tree: [{path: 'CloudAuth.ts', mode: '100644', type: 'blob'}]}
         if (method === 'POST' && path.endsWith('/git/trees')) return {sha: 'tree1'}
         if (method === 'POST' && path.endsWith('/git/commits')) return {sha: NEW}
         if (method === 'PATCH') return (head = body.sha, {})
+    })
+    // Playwright's routes skip the HTTP cache: what can be checked is that every API request revalidates
+    await page.addInitScript(() => {
+        const fetch = window.fetch
+        window.apiCache = []
+        window.fetch = (input, init) => {
+            if (String(input.url || input).startsWith('https://api.github.com/')) window.apiCache.push(init?.cache ?? input.cache)
+            return fetch(input, init)
+        }
     })
     await page.goto(`./?pr=${PR}&file=${FILE}`)
     await ready(page)
@@ -48,4 +57,7 @@ test('edits a file, commits it to the pull request branch, and undoes the commit
     await page.locator('.toast-action', {hasText: 'Undo'}).click()
     await expect(page.locator('#btn-commit')).toBeVisible()
     expect(github.writes.filter((w) => w.method === 'PATCH').map((w) => w.body)).toEqual([{sha: HEAD, force: true}])
+    const modes = await page.evaluate(() => window.apiCache)
+    expect(modes.length).toBeGreaterThan(10)
+    expect(modes.filter((m) => m !== 'no-cache')).toEqual([])
 })

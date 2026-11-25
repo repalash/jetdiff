@@ -37,7 +37,10 @@ export function authConfig() {
     return authConfigPromise
 }
 
+const SIGNIN_KEY = 'jd.signingIn'
+
 export function signIn() {
+    try { sessionStorage.setItem(SIGNIN_KEY, '1') } catch { /* no storage: the token from sign-in will be refused */ }
     location.assign(`${new URL('login', AUTH)}?return=${encodeURIComponent(location.pathname + location.search)}`)
 }
 
@@ -46,14 +49,20 @@ export async function signOut() {
     await fetch(new URL('logout', AUTH), {method: 'POST'}).catch(() => {})
 }
 
-/** Takes the token Sign in with GitHub left in the URL fragment; true if there was one. */
+/** Takes the token Sign in with GitHub left in the URL fragment, if this tab started the sign-in; true if taken. */
 export function takeSignInToken() {
     const params = new URLSearchParams(location.hash.slice(1))
     const token = params.get('jd-auth')
     if (!token) return false
-    setToken(token, +params.get('expires_in') || 0)
     history.replaceState(history.state, '', location.pathname + location.search)
-    return true
+    // a link with someone else's token in the fragment must not replace the user's
+    let started = false
+    try {
+        started = sessionStorage.getItem(SIGNIN_KEY) === '1'
+        sessionStorage.removeItem(SIGNIN_KEY)
+    } catch { /* no storage */ }
+    if (started) setToken(token, +params.get('expires_in') || 0)
+    return started
 }
 
 let refreshing
@@ -114,9 +123,8 @@ let SNAP = (() => {
     const s = new URLSearchParams(location.search).get('snap')
     try {
         if (s !== null) s ? localStorage.setItem(SNAP_KEY, s) : localStorage.removeItem(SNAP_KEY)
-        const v = localStorage.getItem(SNAP_KEY) || ''
-        if (v) return v
-    } catch { /* no storage */ }
+        return localStorage.getItem(SNAP_KEY) || ''
+    } catch { /* no storage (a sandboxed page): window.name keeps it instead; elsewhere any site could set it */ }
     if (s !== null) window.name = s ? SNAP_NAME + s : ''
     return s || (window.name.startsWith(SNAP_NAME) ? window.name.slice(SNAP_NAME.length) : '')
 })()
@@ -166,7 +174,8 @@ async function snapRequest(url, method) {
     return new Response(await res.arrayBuffer(), {status: e.status, headers: {'Content-Type': e.type}})
 }
 
-async function request(path, {accept = 'application/vnd.github+json', method = 'GET', body} = {}) {
+/** `live`: refuses the service worker's saved copy (what a commit is checked against must be current). */
+async function request(path, {accept = 'application/vnd.github+json', method = 'GET', body, live = false} = {}) {
     const url = path.startsWith('http') ? path : API + path
     if (SNAP) {
         const res = await snapRequest(url, method)
@@ -177,7 +186,8 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
     let token = await currentToken()
     if (token) headers.Authorization = `Bearer ${token}`
     if (body) headers['Content-Type'] = 'application/json'
-    const send = () => fetch(url, {method, headers, body: body && JSON.stringify(body)})
+    // GitHub allows a minute of caching: revalidated (a 304 costs no rate limit), else a ref or PR head can be stale
+    const send = () => fetch(url, {method, headers, body: body && JSON.stringify(body), cache: 'no-cache'})
     let res = await send()
     if (res.status === 401 && signedIn()) {
         token = await renewToken()
@@ -185,7 +195,10 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
         else delete headers.Authorization
         res = await send()
     }
-    if (res.headers.get('x-jd-offline')) window.dispatchEvent(new CustomEvent('jd-offline'))
+    if (res.headers.get('x-jd-offline')) {
+        window.dispatchEvent(new CustomEvent('jd-offline'))
+        if (live) throw new GitHubError('No network: GitHub could not be reached', 503)
+    }
     if (!res.ok) {
         let message = res.statusText || `HTTP ${res.status}`
         try { message = (await res.json()).message || message } catch { /* not json */ }
@@ -375,7 +388,8 @@ export function getFileContent(owner, repo, ref, path) {
         const res = /^[0-9a-f]{40}$/.test(ref) ? await cachedFetch(CONTENTS_CACHE, url, load) : await load()
         const bytes = new Uint8Array(await res.arrayBuffer())
         if (looksBinary(bytes)) return {binary: true, size: bytes.length, blob: new Blob([bytes])}
-        return {text: new TextDecoder('utf-8').decode(bytes), size: bytes.length}
+        // a BOM stays in the text (Monaco keeps it aside), so a commit writes it back
+        return {text: new TextDecoder('utf-8', {ignoreBOM: true}).decode(bytes), size: bytes.length}
     })
 }
 
@@ -448,12 +462,41 @@ function canWrite() {
     if (!getToken()) throw new GitHubError('Committing needs a GitHub token', 401)
 }
 
+const branchHead = async (owner, repo, branch) => (await json(`/repos/${owner}/${repo}/git/ref/${refPath(branch)}`, {live: true})).object.sha
+
 // the edits were made on the files of `expected`: refused when the branch has moved since
 async function leasedHead(owner, repo, branch, expected) {
-    const head = (await json(`/repos/${owner}/${repo}/git/ref/${refPath(branch)}`)).object.sha
+    const head = await branchHead(owner, repo, branch)
     if (head !== expected)
         throw new GitHubError(`The branch has new commits (${head.slice(0, 7)}) since this page loaded: reload first`, 409)
     return head
+}
+
+async function updateRef(owner, repo, branch, sha, force) {
+    try {
+        await json(`/repos/${owner}/${repo}/git/refs/${refPath(branch)}`, {method: 'PATCH', body: {sha, force}})
+    } catch (e) {
+        // the update can land with its answer lost: then the branch is at `sha`
+        if (!(e instanceof TypeError) && !(e.status >= 502)) throw e
+        if (await branchHead(owner, repo, branch).catch(() => null) !== sha) throw e
+    }
+}
+
+const dirOf = (path) => path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+
+/** The tree entries of `files` at `head`, read per directory (a recursive read of a big repository is truncated). */
+async function headEntries(R, head, rootTree, files) {
+    const dirs = [...new Set(files.map((f) => dirOf(f.path)))]
+    const trees = new Map(await Promise.all(dirs.map(async (d) =>
+        [d, (await json(`${R}/trees/${d ? encodeURIComponent(`${head}:${d}`) : rootTree}`)).tree])))
+    return files.map((f) => {
+        const name = f.path.slice(f.path.lastIndexOf('/') + 1)
+        const e = trees.get(dirOf(f.path)).find((x) => x.path === name)
+        // a submodule or a symlink would be replaced by a file
+        if (!e || e.type !== 'blob' || !['100644', '100755'].includes(e.mode))
+            throw new GitHubError(`${f.path} is ${e ? `not a regular file (mode ${e.mode})` : 'not in the branch'}: nothing was committed`, 422)
+        return e
+    })
 }
 
 /** Commits `files` ([{path, text}]) on `branch` at `expectedHead`, or with `amend` replaces that commit. {sha, previous}. */
@@ -464,15 +507,11 @@ export async function commitFiles({owner, repo, branch, expectedHead, files, mes
     const headCommit = await json(`${R}/commits/${head}`)
     let treeSha = headCommit.tree.sha
     if (files.length) {
-        // keep each file's mode (an executable script stays one)
-        const modes = new Map()
-        try {
-            const t = await json(`${R}/trees/${treeSha}?recursive=1`)
-            for (const e of t.tree) if (e.type === 'blob') modes.set(e.path, e.mode)
-        } catch { /* default mode */ }
+        // each file keeps its mode: an executable script stays one
+        const entries = await headEntries(R, head, treeSha, files)
         treeSha = (await json(`${R}/trees`, {method: 'POST', body: {
             base_tree: treeSha,
-            tree: files.map((f) => ({path: f.path, mode: modes.get(f.path) || '100644', type: 'blob', content: f.text})),
+            tree: files.map((f, i) => ({path: f.path, mode: entries[i].mode, type: 'blob', content: f.text})),
         }})).sha
     }
     // without an author or committer GitHub uses the token's account; an amend keeps the commit's author
@@ -481,7 +520,9 @@ export async function commitFiles({owner, repo, branch, expectedHead, files, mes
         : {message, tree: treeSha, parents: [head], ...(author && {author})}
     if (committer) body.committer = committer
     const commit = await json(`${R}/commits`, {method: 'POST', body})
-    await json(`${R}/refs/${refPath(branch)}`, {method: 'PATCH', body: {sha: commit.sha, force: amend}})
+    // a forced update cannot be made conditional here (issues/open/atomic-force-updates.md): checked again just before
+    if (amend) await leasedHead(owner, repo, branch, head)
+    await updateRef(owner, repo, branch, commit.sha, amend)
     return {sha: commit.sha, previous: head}
 }
 
@@ -489,11 +530,16 @@ export async function commitFiles({owner, repo, branch, expectedHead, files, mes
 export async function moveBranch({owner, repo, branch, sha, expected}) {
     canWrite()
     await leasedHead(owner, repo, branch, expected)
-    await json(`/repos/${owner}/${repo}/git/refs/${refPath(branch)}`, {method: 'PATCH', body: {sha, force: true}})
+    await updateRef(owner, repo, branch, sha, true)
 }
 
 export async function getPullHead(owner, repo, number) {
-    return (await json(`/repos/${owner}/${repo}/pulls/${number}`)).head.sha
+    return (await json(`/repos/${owner}/${repo}/pulls/${number}`, {live: true})).head.sha
+}
+
+/** A commit's message, author and tree, from the Git data API. */
+export async function getGitCommit(owner, repo, sha) {
+    return json(`/repos/${owner}/${repo}/git/commits/${sha}`)
 }
 
 /** `{comments, reviews, inline}` of a PR, bodies with GitHub's HTML. */

@@ -1,5 +1,5 @@
 // The page keeps file contents at a commit (jd-contents-v1), snapshot files from a URL (jd-snap) and packs (jd-pack)
-// itself; this worker keeps the app, its libraries and the GitHub API responses.
+// itself; this worker keeps the app, its libraries and the GitHub API responses (not branch refs).
 
 const VERSION = 'v7'
 const SHELL = 'jd-shell-' + VERSION
@@ -38,8 +38,9 @@ self.addEventListener('fetch', (e) => {
         const scope = new URL('./', self.registration.scope).pathname
         if (url.pathname.startsWith(scope) && !url.pathname.startsWith(scope + 'auth/')) e.respondWith(shell(req))
     } else if (url.host === 'api.github.com') {
-        // raw file contents are cached by the page
-        if (!(req.headers.get('accept') || '').includes('raw')) e.respondWith(api(req))
+        // raw file contents are cached by the page; a branch ref is never answered from a saved copy, as commits are
+        // checked against it
+        if (!(req.headers.get('accept') || '').includes('raw') && !/\/git\/refs?\//.test(url.pathname)) e.respondWith(api(req))
     } else if (LIB_HOSTS.has(url.host) && !url.pathname.endsWith('.zip')) {
         // offline packs are imported into their own cache: not kept twice
         e.respondWith(lib(req))

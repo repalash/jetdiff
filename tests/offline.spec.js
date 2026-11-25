@@ -32,6 +32,16 @@ test('a pull request opened before works with no network', async ({page, context
     expect(new URL(page.url()).searchParams.get('pr')).toBe(PR)
 })
 
+test('a branch ref is never answered from a saved copy', async ({page, context}) => {
+    page.github.handle(({path}) => path.includes('/git/ref/') && {object: {sha: 'a'.repeat(40)}})
+    await page.goto('./')
+    await controlled(page)
+    const read = () => page.evaluate(() => fetch('https://api.github.com/repos/repalash/threepipe/git/ref/heads/main').then((r) => r.status, () => 'failed'))
+    expect(await read()).toBe(200)
+    await goOffline(context)
+    expect(await read()).toBe('failed')
+})
+
 test('an offline pack imports, then opens with no network', async ({page, context}) => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'jd-pack-'))
     execFileSync('python3', ['tools/make-pack.py', fileURLToPath(FIXTURE_DIR), out])

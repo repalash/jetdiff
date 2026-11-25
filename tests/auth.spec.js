@@ -21,6 +21,15 @@ test('Sign in with GitHub keeps the token it brings back, and the API gets it', 
     expect([...seen]).toEqual(['Bearer tok1'])
 })
 
+test('a token in a link the user did not start sign-in from is ignored', async ({page}) => {
+    const seen = authHeaders(page.github)
+    await page.goto(`./?pr=${PR}#jd-auth=someone-elses&expires_in=28800`)
+    await ready(page)
+    expect(new URL(page.url()).hash).toBe('')
+    expect(await page.evaluate(() => localStorage.getItem('jd.token'))).toBeNull()
+    expect(seen.size).toBe(0)
+})
+
 test('a signed-in token that expired is renewed before it is used', async ({page, context}) => {
     const seen = authHeaders(page.github)
     await context.addInitScript(() => {

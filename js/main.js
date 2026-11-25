@@ -1,5 +1,5 @@
 import {
-    authConfig, commitFiles, getFileContent, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
+    authConfig, commitFiles, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
     paramsToTarget, parseTarget, listPullRequests, packMemory, searchMyPullRequests, setFileViewed, setToken, snapshotName, snapshotRepos,
     targetToParams,
 } from './github.js'
@@ -38,8 +38,9 @@ const store = {
     raw(key) {
         try { return localStorage.getItem('jd.' + key) } catch { return null }
     },
+    /** False when the value was not kept: too large, or no storage. */
     setRaw(key, v) {
-        try { localStorage.setItem('jd.' + key, v) } catch { /* too large or no storage */ }
+        try { localStorage.setItem('jd.' + key, v); return true } catch { return false }
     },
     get(key, def) {
         const v = store.raw(key)
@@ -47,7 +48,7 @@ const store = {
         try { return JSON.parse(v) } catch { return def }
     },
     set(key, v) {
-        store.setRaw(key, JSON.stringify(v))
+        return store.setRaw(key, JSON.stringify(v))
     },
 }
 
@@ -360,6 +361,11 @@ const state = {
     edits: new Map(), // path -> edited text of the open PR's head, not committed yet (empty off the PR's full changes)
     editKey: null, // the PR the edits belong to ('owner/repo#n'), null when not on a PR's full changes
     editHead: null, // the head commit the edits were made on
+    editsBase: new Map(), // the edits as this tab last read or wrote them in storage: the others are its own changes
+    editsUnsaved: false, // storage refused the last write of the edits
+    ready: false, // the change set and its edits are shown (Commit is off while a load attaches the edits)
+    commitGen: 0, // a commit or an undo: a newer one cancels the reload an older one waits for
+    headMessage: null, // {sha, text}: the head commit's message, for Amend
     cmtExcluded: new Set(), // edited files unchecked in the Commit panel
     editing: false, // edit mode: the right side (the PR head) is editable
     editableFile: false,
@@ -409,6 +415,8 @@ async function route(force = false) {
 async function openTarget(target, file) {
     const id = ++state.loadId
     state.target = target
+    state.ready = false
+    renderCommitPanel(false)
     $('#landing').hidden = true
     $('#app').hidden = false
     buildShell()
@@ -426,15 +434,23 @@ async function openTarget(target, file) {
         return showLanding(e instanceof GitHubError ? `${labelForTarget(target)}: ${e.message}` : String(e.message || e))
     }
     if (id !== state.loadId) return
+    // the change set is shown with its edits only: until then, a commit would put edits made on the previous head
+    // onto this one
+    const edits = await attachEdits(target, cs, id)
+    if (!edits) return
     state.cs = cs
+    state.editKey = fullPr(cs) ? prKey(target) : null
+    state.editHead = fullPr(cs) ? cs.headSha : null
+    state.edits = edits
+    state.editsBase = new Map(edits)
+    state.ready = true
+    if (fullPr(cs) && $('#cmt-amend')?.checked) loadHeadMessage().then(() => renderCommitPanel(false))
     const pk = prKey(target)
     if (state.lastPr !== pk) {
         state.lastPr = pk
         state.cmtExcluded = new Set()
         state.closedTabs = new Set()
     }
-    await attachEdits(cs)
-    if (id !== state.loadId) return
     renderEdits()
     addRecent(target, cs.title)
     document.title = `${cs.title} · ${labelForTarget(target)}`
@@ -1003,15 +1019,25 @@ async function loadViewed() {
         if (id !== state.loadId) return
         state.viewedRemote = {id: prId}
         state.viewed = new Set([...states].filter(([, s]) => s === 'VIEWED').map(([p]) => p))
-        for (const [path, v] of Object.entries(store.get(pendingKey(), {}))) {
+        const key = pendingKey()
+        // a mark leaves the queue once GitHub has it; one that fails is sent again on the next load
+        for (const [path, v] of Object.entries(store.get(key, {}))) {
+            if (!states.has(path) || (states.get(path) === 'VIEWED') === v) { dropPending(key, path, v); continue }
             v ? state.viewed.add(path) : state.viewed.delete(path)
-            setFileViewed(prId, path, v).catch(() => {})
+            setFileViewed(prId, path, v).then(() => dropPending(key, path, v), () => {})
         }
-        store.set(pendingKey(), {})
         renderViewed()
     } catch (e) {
         console.warn('Viewed state from GitHub unavailable; keeping it in this browser', e)
     }
+}
+
+/** Removes a queued Viewed mark, unless it was toggled again since. */
+function dropPending(key, path, v) {
+    const p = store.get(key, {})
+    if (p[path] !== v) return
+    delete p[path]
+    store.set(key, p)
 }
 
 function renderViewed() {
@@ -1032,6 +1058,8 @@ async function toggleViewed(file, viewed) {
     if (state.viewedRemote) {
         try {
             await setFileViewed(state.viewedRemote.id, file.path, viewed)
+            // a mark still queued for this file would undo this one on the next load
+            dropPending(pendingKey(), file.path, !viewed)
         } catch (e) {
             if (e instanceof TypeError || e?.status === 503 || !navigator.onLine) {
                 pend()
@@ -1140,10 +1168,12 @@ async function openFileAt(i, push = true, keepScroll = false) {
     // a fresh URI per load: the previous models are disposed only after the new ones are shown
     const uri = (side) => monaco.Uri.parse(`jd-${side}://${id}/${f.path.split('/').map(encodeURIComponent).join('/')}`)
     state.editableFile = canEdit(f)
-    state.pristine = mod.text
     const edited = state.editableFile && state.edits.has(f.path)
     const original = monaco.editor.createModel(orig.text, lang, uri('a'))
-    const modified = monaco.editor.createModel(edited ? state.edits.get(f.path) : mod.text, lang, uri('b'))
+    const modified = monaco.editor.createModel(mod.text, lang, uri('b'))
+    // edits are compared with the model's own text: Monaco keeps a BOM aside and evens out mixed line endings
+    state.pristine = modelText(modified)
+    if (edited) modified.setValue(state.edits.get(f.path))
     state.models = [original, modified]
     if (state.editableFile) modified.onDidChangeContent(() => onEdited(f, original, modified, id))
     // tokenize up front: deleted lines in the unified view otherwise can render before their colors exist
@@ -1764,9 +1794,14 @@ function setEditing(on) {
     }
 }
 
+/** A model's text with its BOM, as committed. */
+function modelText(m) {
+    return m.getValue(undefined, true)
+}
+
 let editTimer
 function onEdited(f, original, modified, id) {
-    const text = modified.getValue()
+    const text = modelText(modified)
     if (text === state.pristine) state.edits.delete(f.path)
     else state.edits.set(f.path, text)
     renderEdits()
@@ -1793,55 +1828,122 @@ function renderEdits() {
     saveEdits()
 }
 
-// stored per PR with the head they were made on, so they survive a reload or a closed browser
+// stored per PR with the head they were made on, so they survive a reload or a closed browser: {head, files}, and
+// `pending`: [{path, head, text}] edits of another head not carried over to `head` yet (a read failed, or another tab
+// was on that head), tried again on each load
 const editStore = () => store.get('edits', {}) || {}
 
-function setStoredEdits(key, head, files) {
+/** Stores `fn(entry)` as the PR's entry, read afresh as another tab may have written it; false when not kept. */
+function writeStoredEdits(key, fn) {
     const all = editStore()
-    if (Object.keys(files).length) all[key] = {head, files}
+    const e = fn(all[key] || {})
+    if (!e.pending?.length) delete e.pending
+    const has = Object.keys(e.files || {}).length || e.pending
+    if (has) all[key] = e
     else delete all[key]
-    store.set('edits', all)
+    const ok = store.set('edits', all)
+    if (!ok && has && !state.editsUnsaved)
+        toast('Your edits could not be saved on this device (its storage is full or unavailable): they are only in this tab until committed', 'error', 15000)
+    state.editsUnsaved = !ok && !!has
+    return ok
 }
 
 let saveTimer
 function saveEdits() {
     clearTimeout(saveTimer)
-    const key = state.editKey, head = state.editHead, files = Object.fromEntries(state.edits)
-    if (key) saveTimer = setTimeout(() => setStoredEdits(key, head, files), 200)
+    if (state.editKey) saveTimer = setTimeout(flushEdits, 200)
 }
 
+/** Stores the files this tab changed since it last read or wrote them, so another tab's edits of other files stay. */
 function flushEdits() {
-    if (!state.editKey) return
     clearTimeout(saveTimer)
-    setStoredEdits(state.editKey, state.editHead, Object.fromEntries(state.edits))
+    const key = state.editKey, head = state.editHead, base = state.editsBase
+    if (!key) return
+    const changed = [...new Set([...state.edits.keys(), ...base.keys()])].filter((p) => state.edits.get(p) !== base.get(p))
+    if (!changed.length) return
+    const ok = writeStoredEdits(key, (e) => {
+        if (e.head && e.head !== head && Object.keys(e.files || {}).length) {
+            // another tab is on another head: these wait aside until a load carries them over
+            const pending = (e.pending || []).filter((p) => !(p.head === head && changed.includes(p.path)))
+            for (const p of changed) if (state.edits.has(p)) pending.push({path: p, head, text: state.edits.get(p)})
+            return {...e, pending}
+        }
+        const files = {...(e.head === head ? e.files : {})}
+        for (const p of changed) state.edits.has(p) ? files[p] = state.edits.get(p) : delete files[p]
+        return {...e, head, files}
+    })
+    if (ok) state.editsBase = new Map(state.edits)
 }
 
 /**
- * The edits of the loaded PR; none off its full changes (they stay stored). When the head moved since they were made,
- * only the edits of files that did not change between the two heads are kept.
+ * The edits of `cs` (path -> text), or null when a newer load started; none off a PR's full changes (they stay stored).
+ * An edit made on another head is carried over when its file is the same at both heads, dropped when it changed, and
+ * kept as it is when a read fails (tried again on the next load).
  */
-async function attachEdits(cs) {
+async function attachEdits(t, cs, id) {
     flushEdits()
-    const t = state.target
-    if (!headKey()) { state.editKey = null; state.editHead = null; state.edits = new Map(); return }
-    const key = prKey(t)
-    state.editKey = key
-    state.editHead = cs.headSha
-    const e = editStore()[key]
-    if (!e || !e.files) { state.edits = new Map(); return }
-    if (e.head === cs.headSha) { state.edits = new Map(Object.entries(e.files)); return }
-    const kept = new Map(), dropped = []
-    await Promise.all(Object.entries(e.files).map(async ([path, text]) => {
+    if (!fullPr(cs)) return new Map()
+    const key = prKey(t), head = cs.headSha
+    const held = (e) => [
+        ...(e.head && e.head !== head ? Object.entries(e.files || {}).map(([path, text]) => ({path, head: e.head, text})) : []),
+        ...(e.pending || []),
+    ]
+    const same = new Map() // 'head:path' -> whether the file is the same at that head and at cs's
+    await Promise.all(held(editStore()[key] || {}).map(async ({path, head: h}) => {
+        if (h === head) return same.set(`${h}:${path}`, true)
         try {
-            const [a, b] = await Promise.all([getFileContent(t.owner, t.repo, e.head, path), getFileContent(t.owner, t.repo, cs.headSha, path)])
-            if (!a.binary && !b.binary && a.text === b.text) kept.set(path, text)
-            else dropped.push(path)
-        } catch { dropped.push(path) }
+            const [a, b] = await Promise.all([getFileContent(t.owner, t.repo, h, path), getFileContent(t.owner, t.repo, head, path)])
+            same.set(`${h}:${path}`, !a.binary && !b.binary && a.text === b.text)
+        } catch (e) {
+            // missing at one of the heads: changed
+            if (e.status === 404) same.set(`${h}:${path}`, false)
+        }
     }))
-    state.edits = kept
-    setStoredEdits(key, cs.headSha, Object.fromEntries(kept))
-    if (dropped.length) toast(`Dropped your edits of ${filesLabel(dropped)}: changed on GitHub since`, 'error', 8000)
+    if (id !== state.loadId) return null
+    // what was typed or written by another tab meanwhile is in storage now
+    flushEdits()
+    const now = editStore()[key] || {}
+    if (!held(now).length) return new Map(now.head === head ? Object.entries(now.files || {}) : [])
+    let files = {}
+    const changed = [], replaced = []
+    writeStoredEdits(key, (e) => {
+        files = e.head === head ? {...e.files} : {}
+        const pending = []
+        for (const h of held(e)) {
+            const s = same.get(`${h.head}:${h.path}`)
+            if (s === undefined) pending.push(h)
+            else if (!s) changed.push(h.path)
+            else if (!(h.path in files)) files[h.path] = h.text
+            else if (files[h.path] !== h.text) replaced.push(h.path)
+        }
+        return {...e, head, files, pending}
+    })
+    if (changed.length) toast(`Dropped your edits of ${filesLabel(changed)}: changed on GitHub since`, 'error', 8000)
+    if (replaced.length) toast(`Dropped your edits of ${filesLabel(replaced)} made on an older head: edited again since`, 'error', 8000)
+    return new Map(Object.entries(files))
 }
+
+// another tab of this PR wrote its edits: its changes are taken where this tab has none of its own
+window.addEventListener('storage', (ev) => {
+    if (ev.key !== 'jd.edits' || !state.editKey || !state.ready) return
+    const e = editStore()[state.editKey] || {head: state.editHead, files: {}}
+    if (e.head !== state.editHead) return
+    const files = e.files || {}, base = state.editsBase
+    let open = false, any = false
+    for (const p of new Set([...Object.keys(files), ...base.keys()])) {
+        if (files[p] === base.get(p) || state.edits.get(p) !== base.get(p)) continue
+        const isOpen = p === currentFile()?.path && state.editableFile
+        // the file being edited here keeps its text: it is written only if edited again
+        if (isOpen && state.editing) continue
+        open ||= isOpen
+        any = true
+        if (p in files) { state.edits.set(p, files[p]); base.set(p, files[p]) }
+        else { state.edits.delete(p); base.delete(p) }
+    }
+    if (!any) return
+    renderEdits()
+    if (open) reopenFile(true)
+})
 
 const checkedEdits = () => [...state.edits.keys()].filter((p) => !state.cmtExcluded.has(p))
 
@@ -1853,16 +1955,38 @@ function rollbackChecked() {
     if (paths.includes(currentFile()?.path)) reopenFile(true)
 }
 
+/** The message of the commit the edits are on, once read; else null. */
 function headCommitMessage() {
-    const c = state.cs?.commits
-    return c?.length ? c[c.length - 1].commit.message : ''
+    const h = state.headMessage
+    return h && h.sha === state.editHead ? h.text : null
 }
 
-function onAmendToggle() {
+// cs.commits stops at 250 and misses a push made since the load: the message is read from the commit itself
+async function loadHeadMessage() {
+    const sha = state.editHead, pr = state.cs?.pr
+    if (!sha || !pr?.head?.repo || headCommitMessage() !== null) return
+    try {
+        state.headMessage = {sha, text: (await getGitCommit(pr.head.repo.owner.login, pr.head.repo.name, sha)).message || ''}
+    } catch (e) {
+        // a snapshot has no such response: its list of commits is complete and current
+        const last = state.cs.commits?.at(-1)
+        if (last?.sha === sha) state.headMessage = {sha, text: last.commit.message}
+        else if (sha === state.editHead) showError($('#cmt-err'), `Could not read the last commit: ${e.message}`)
+    }
+}
+
+async function onAmendToggle() {
     const ta = $('#cmt-msg')
     // as in the IDE: Amend brings the last commit's message, unticking it restores what was typed
-    if ($('#cmt-amend').checked) { state.cmtTyped = ta.value; ta.value = headCommitMessage() }
-    else ta.value = state.cmtTyped ?? ''
+    if (!$('#cmt-amend').checked) {
+        ta.value = state.cmtTyped ?? ''
+        return renderCommitPanel(false)
+    }
+    state.cmtTyped = ta.value
+    ta.value = ''
+    renderCommitPanel(false)
+    await loadHeadMessage()
+    if ($('#cmt-amend').checked && !ta.value) ta.value = headCommitMessage() ?? ''
     renderCommitPanel(false)
 }
 
@@ -1899,7 +2023,9 @@ function renderCommitPanel(tree = true) {
         : `Author: <b>your GitHub account</b>${amend ? ' (Amend keeps the commit\'s author)' : ''}`
     const msg = $('#cmt-msg').value.trim()
     // an amend with no files can still change the message
-    $('#cmt-go').disabled = state.committing || !canEditPr() || !msg || (!included.length && !(amend && msg !== headCommitMessage().trim()))
+    const headMsg = headCommitMessage()
+    $('#cmt-go').disabled = state.committing || !state.ready || !canEditPr() || !msg
+        || (!included.length && !(amend && headMsg !== null && msg !== headMsg.trim()))
     $('#cmt-go').textContent = state.committing ? 'Pushing…' : amend ? 'Amend and Push' : 'Commit and Push'
 }
 
@@ -1971,12 +2097,12 @@ function openCommitPanel() {
 }
 
 async function doCommit() {
-    if ($('#cmt-go').disabled) return
+    if ($('#cmt-go').disabled || !state.ready) return
     if (!getToken()) {
         toast('Committing needs a GitHub token with Contents: write', 'error')
         return tokenDialog()
     }
-    const {pr, headSha} = state.cs
+    const {pr} = state.cs
     const amend = $('#cmt-amend').checked
     const message = $('#cmt-msg').value.trim()
     const paths = checkedEdits()
@@ -1987,7 +2113,7 @@ async function doCommit() {
     renderCommitPanel(false)
     try {
         const id = identity()
-        const {sha, previous} = await commitFiles({...where, expectedHead: headSha, message, amend, author: id.author, committer: id.committer,
+        const {sha, previous} = await commitFiles({...where, expectedHead: state.editHead, message, amend, author: id.author, committer: id.committer,
             files: paths.map((path) => ({path, text: state.edits.get(path)}))})
         // the unchecked files keep their edits: unchanged by this commit, they carry over to the new head
         const committed = Object.fromEntries(paths.map((p) => [p, state.edits.get(p)]))
@@ -2002,11 +2128,12 @@ async function doCommit() {
         toast(`${amend ? 'Amended' : 'Committed'} ${sha.slice(0, 7)} and pushed to ${pr.head.ref}`, 'info', 10000, {
             label: 'Undo', run: () => undoCommit(where, previous, sha, key, committed),
         })
-        await waitForHead(sha)
-        reloadTarget()
+        if (await waitForHead(sha, ++state.commitGen)) reloadTarget()
     } catch (err) {
         let m = err.message
-        if (err.status === 503 || err instanceof TypeError || !navigator.onLine) m = 'No network: your edits are kept on this device. Commit and Push once you are online again.'
+        if (err.status === 503 || err instanceof TypeError || !navigator.onLine) m = state.editsUnsaved
+            ? 'No network, and this device could not save your edits: keep this tab open, and Commit and Push once you are online again.'
+            : 'No network: your edits are kept on this device. Commit and Push once you are online again.'
         else if (err.status === 403 || err.status === 404) m += `. The token needs Contents: write on ${pr.head.repo.full_name}.`
         showError($('#cmt-err'), m)
     } finally {
@@ -2015,33 +2142,43 @@ async function doCommit() {
     }
 }
 
-/** GitHub updates the PR's head a moment after a push. */
-async function waitForHead(sha) {
+/** GitHub updates the PR's head a moment after a push. False when a newer commit or undo took over (`gen`). */
+async function waitForHead(sha, gen) {
     const t = state.target
-    for (let k = 0; k < 10; k++) {
-        if (await getPullHead(t.owner, t.repo, t.number).catch(() => null) === sha) return
+    for (let k = 0; k < 10 && gen === state.commitGen; k++) {
+        if (await getPullHead(t.owner, t.repo, t.number).catch(() => null) === sha) break
         await new Promise((r) => setTimeout(r, 1500))
     }
+    return gen === state.commitGen
 }
 
 /** Moves the branch back and restores the committed edits, as the IDE's Undo Commit does. */
 async function undoCommit(where, previous, sha, key, committed) {
+    // the commit's reload would show the head this undoes, and drop the restored edits as made on another head
+    const gen = ++state.commitGen
     try {
         await moveBranch({...where, sha: previous, expected: sha})
-        // the edits made since the commit win over the committed ones; all are now edits of `previous`
-        const open = state.editKey === key
-        const files = {...committed, ...(open ? Object.fromEntries(state.edits) : editStore()[key]?.files || {})}
-        if (open) {
-            state.edits = new Map(Object.entries(files))
-            state.editHead = previous
-        }
-        setStoredEdits(key, previous, files)
-        toast(`${where.branch} is back at ${previous.slice(0, 7)}`)
-        await waitForHead(previous)
-        reloadTarget()
     } catch (e) {
         toast(`Undo failed: ${e.message}`, 'error', 8000)
+        if (await waitForHead(sha, gen)) reloadTarget()
+        return
     }
+    // a load of the commit already under way is cancelled too
+    state.loadId++
+    // the edits made since the commit win over the committed ones; all are now edits of `previous`
+    const open = state.editKey === key
+    const files = {...committed, ...(open ? Object.fromEntries(state.edits) : editStore()[key]?.files || {})}
+    if (open) {
+        state.edits = new Map(Object.entries(files))
+        state.editsBase = new Map(state.edits)
+        state.editHead = previous
+        // shown at the commit undone, the page offers Commit again once it shows `previous`
+        if (state.cs?.headSha !== previous) state.ready = false
+        renderEdits()
+    }
+    writeStoredEdits(key, (e) => ({...e, head: previous, files}))
+    toast(`${where.branch} is back at ${previous.slice(0, 7)}`)
+    if (await waitForHead(previous, gen)) reloadTarget()
 }
 
 window.addEventListener('beforeunload', (e) => {

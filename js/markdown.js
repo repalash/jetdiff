@@ -2,7 +2,12 @@ import {highlightCode} from './editor.js'
 
 const MD_IT = 'https://esm.sh/markdown-it@14.1.0'
 const PURIFY = 'https://esm.sh/dompurify@3.2.4'
-const PURIFY_OPTIONS = {ADD_ATTR: ['target']}
+// what GitHub strips from Markdown too: no restyling the app, no forms, no frames; ids get GitHub's user-content- prefix
+const PURIFY_OPTIONS = {
+    ADD_ATTR: ['target'],
+    FORBID_TAGS: ['style', 'form', 'button', 'textarea', 'select', 'option', 'dialog', 'iframe', 'frame', 'object', 'embed'],
+    SANITIZE_NAMED_PROPS: true,
+}
 
 // The rich diff wraps changed characters in private-use characters in the Markdown source, renders it, then turns
 // them into <ins> / <del> in the text (never in attributes).
@@ -30,6 +35,11 @@ export function loadMarkdown() {
         purify.addHook('afterSanitizeAttributes', (node) => {
             const href = node.tagName === 'A' && node.getAttribute('href')
             if (href && !href.startsWith('#')) { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer') }
+            // inputs only as task-list checkboxes
+            if (node.tagName === 'INPUT') {
+                if (node.getAttribute('type') !== 'checkbox') node.remove()
+                else node.setAttribute('disabled', '')
+            }
         })
         return {md, purify}
     })
@@ -89,7 +99,8 @@ export async function renderMarkdown(text, {classify, link, image, marks = false
     if (!marks) return html
     const tpl = template(html)
     applyMarks(tpl.content)
-    return tpl.innerHTML
+    // again: removing the marks from attributes can complete a URL the first pass let through (java\uE000script:)
+    return purify.sanitize(tpl.innerHTML, PURIFY_OPTIONS)
 }
 
 export async function highlightBlocks(el) {
@@ -170,6 +181,9 @@ function fences(lines) {
  * back into the new side. Returns {text, map}: map[i] is the source line of line i, 0 for a line put back.
  */
 export function richSource(oldText, newText, lineChanges, side, unified = false) {
+    // the file's own private-use characters would read as marks
+    oldText = stripMarks(oldText)
+    newText = stripMarks(newText)
     const oldLines = oldText.split('\n'), newLines = newText.split('\n')
     const lines = side === 'old' ? oldLines : newLines
     const fenceOf = fences(lines)
