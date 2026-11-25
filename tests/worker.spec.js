@@ -73,3 +73,16 @@ test('sign-in only returns to a path on this site', async () => {
     const ok = await get('/auth/login?return=' + encodeURIComponent('/?pr=a/b/1&file=x'))
     expect(decodeURIComponent(ok.headers.get('set-cookie'))).toContain('|/?pr=a/b/1&file=x;')
 })
+
+test('request logs carry the path only: no query, no repository names', async () => {
+    const lines = []
+    const real = console.log
+    console.log = (line) => lines.push(JSON.parse(line))
+    try {
+        await get('/?pr=org/private-repo/12&file=src/secret.ts')
+        await worker.fetch(new Request('https://jetdiff.com/org/private-repo/pull/12'), {...env, ASSETS: {fetch: async () => new Response('404 page', {status: 404})}})
+        await get('/auth/callback?code=c&state=s')
+    } finally { console.log = real }
+    expect(lines.map((l) => l.path)).toEqual(['/', '/(github link)', '/auth/callback'])
+    expect(JSON.stringify(lines)).not.toMatch(/private-repo|secret|code=/)
+})

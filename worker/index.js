@@ -1,5 +1,5 @@
-// Serves the static assets (dist/). Running first on every request gives request logs (Workers Logs) and adds what
-// the asset server does not: the www redirect, sign-in (auth.js) and a few security headers.
+// Serves the static assets (dist/). Running first on every request gives request logs (Workers Logs, without the
+// query) and adds what the asset server does not: the www redirect, sign-in (auth.js) and a few security headers.
 import {auth} from './auth.js'
 
 const HEADERS = {'x-content-type-options': 'nosniff', 'referrer-policy': 'strict-origin-when-cross-origin'}
@@ -11,8 +11,10 @@ export default {
             url.hostname = url.hostname.slice(4)
             return Response.redirect(url.href, 301)
         }
+        const start = Date.now()
         const res = url.pathname.startsWith('/auth/') ? await auth(request, env, url) : await asset(request, env)
         for (const [k, v] of Object.entries(HEADERS)) res.headers.set(k, v)
+        log(request, url, res, start)
         return res
     },
 }
@@ -20,4 +22,10 @@ export default {
 async function asset(request, env) {
     const res = await env.ASSETS.fetch(request)
     return new Response(res.body, res)
+}
+
+// a GitHub-style path (/owner/repo/pull/1) names a repository, maybe a private one: logged as a link, not by name
+function log(request, url, res, start) {
+    const path = res.status === 404 && !url.pathname.startsWith('/auth/') ? '/(github link)' : url.pathname
+    console.log(JSON.stringify({method: request.method, path, status: res.status, ms: Date.now() - start}))
 }

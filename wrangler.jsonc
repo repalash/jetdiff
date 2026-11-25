@@ -13,7 +13,9 @@
     // rights on this Worker only (no routes, DNS or workers.dev)
     "workers_dev": false,
     "preview_urls": false,
-    "observability": {"enabled": true},
+    // Cloudflare's own request logs carry the full URL (private repo names, file paths, the sign-in code): off; the Worker
+    // logs one line per request without the query instead
+    "observability": {"enabled": true, "logs": {"invocation_logs": false}},
     // the GitHub App behind Sign in with GitHub (github.com/apps/jetdiff-com); its GITHUB_CLIENT_SECRET is a secret set
     // in the Cloudflare dashboard
     "vars": {"GITHUB_CLIENT_ID": "Iv23liekK9vqEhvS7KpX", "GITHUB_APP_SLUG": "jetdiff-com"},
