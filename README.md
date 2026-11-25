@@ -101,7 +101,9 @@ npm run themes -- /tmp/mtui
 [jetdiff.com](https://jetdiff.com) is a Cloudflare Worker with static assets (`wrangler.jsonc`, `worker/index.js`):
 `npm run build` copies the files the site serves into `dist/`, and `npm run deploy` builds and deploys them with
 wrangler. GitHub Actions deploys `main` after the tests pass (`.github/workflows/ci.yml`), with the repository
-secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and `APP_CLIENT_SECRET` for the GitHub App's client secret. The Worker runs first on each request for request logs, the `www` redirect and a few security headers.
+secrets `CLOUDFLARE_API_TOKEN` (an account token with *Individual Workers Editor* on the jetdiff Worker only) and
+`CLOUDFLARE_ACCOUNT_ID`, and optionally `APP_CLIENT_SECRET` to update the GitHub App's client secret. The domains are
+attached to the Worker in the Cloudflare dashboard, so the token needs no zone or DNS rights. The Worker runs first on each request for request logs, the `www` redirect and a few security headers.
 Any static host works too: serve the files listed in `tools/build.mjs`, with `404.html` for missing paths.
 
 Sign in with GitHub needs the Worker and a GitHub App (`worker/auth.js`): create the app with the callback URL
