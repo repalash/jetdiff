@@ -14,6 +14,8 @@
         {"pattern": "www.jetdiff.com", "custom_domain": true}
     ],
     "observability": {"enabled": true},
-    // GITHUB_CLIENT_ID, GITHUB_APP_SLUG and the GITHUB_CLIENT_SECRET secret are set in the Cloudflare dashboard
+    // the GitHub App behind Sign in with GitHub (github.com/apps/jetdiff-com); its GITHUB_CLIENT_SECRET is a secret set
+    // in the Cloudflare dashboard
+    "vars": {"GITHUB_CLIENT_ID": "Iv23liekK9vqEhvS7KpX", "GITHUB_APP_SLUG": "jetdiff-com"},
     "keep_vars": true
 }

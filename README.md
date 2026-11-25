@@ -105,9 +105,10 @@ Any static host works too: serve the files listed in `tools/build.mjs`, with `40
 
 Sign in with GitHub needs the Worker and a GitHub App (`worker/auth.js`): create the app with the callback URL
 `https://<your domain>/auth/callback`, *Expire user authorization tokens* on, no webhook, and the repository
-permissions *Contents: read and write*, *Pull requests: read and write* and *Metadata: read*. Then set the Worker's
-variables `GITHUB_CLIENT_ID` and `GITHUB_APP_SLUG` and the secret `GITHUB_CLIENT_SECRET`. Without them the site
-offers token pasting only.
+permissions *Contents: read and write*, *Pull requests: read and write* and *Metadata: read*. Its client ID and URL name
+go in `wrangler.jsonc` (`GITHUB_CLIENT_ID`, `GITHUB_APP_SLUG`; jetdiff.com uses
+[jetdiff-com](https://github.com/apps/jetdiff-com)), and its client secret in the Worker's secret `GITHUB_CLIENT_SECRET`.
+Without them the site offers token pasting only.
 
 ## License
 
