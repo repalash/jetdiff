@@ -8,10 +8,11 @@ export const IMPORT_MAP_HASH = 'sha256-hC54ijBPep8MZSBUYSC+Xb3WdvVBX9v/4rqBiEK8S
 // styles. Images: the site, the diff's own blob: and data: images, and any https image, as Markdown previews show remote
 // images. Connections go to the site, GitHub's API and avatars, and to the https sites snapshots and packs are opened
 // from (?snap=https://…, ?packs=…): any https host, which gives away nothing img-src does not already allow. Workers:
-// Monaco's from the site, and fflate's, which it starts from blob: URLs to unzip packs.
+// Monaco's from the site, and fflate's, which it starts from blob: URLs to unzip packs. Scripts: the site's, and
+// Cloudflare Web Analytics' beacon, which Cloudflare adds to jetdiff.com's pages (its reports go to an https host).
 export const CONTENT_SECURITY_POLICY = [
     "default-src 'none'",
-    `script-src 'self' '${IMPORT_MAP_HASH}'`,
+    `script-src 'self' '${IMPORT_MAP_HASH}' https://static.cloudflareinsights.com`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' https: data: blob:",
     "font-src 'self'",
