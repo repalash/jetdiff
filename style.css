@@ -668,6 +668,9 @@ button.pr-link { border: 0; background: none; padding: 0; font: inherit; cursor:
     background: var(--popup); color: var(--fg-strong); border: 1px solid var(--border2); border-radius: 5px;
     padding: 4px 8px; font-size: 12px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0, 0, 0, .35); white-space: pre-line;
 }
+/* the arrow points up at (x, y): a triangle in the border's color, and one in the tip's over it */
+.tip-point::before, .tip-point::after { content: ""; position: absolute; left: var(--arrow); bottom: 100%; transform: translateX(-50%); border: 7px solid transparent; border-top-width: 0; border-bottom-color: var(--border2); }
+.tip-point::after { border-width: 0 6px 6px; border-bottom-color: var(--popup); }
 .statusbar .st-group { display: contents; }
 .statusbar .st-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .statusbar .st-item .ic { width: 13px; height: 13px; }

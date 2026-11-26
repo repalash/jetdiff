@@ -12,7 +12,8 @@ import {FileTree} from './tree.js'
 import {fileIcon, icons, isImagePath} from './icons.js'
 import {formatWhen, LogView} from './log.js'
 import {onDoubleShift, Palette} from './palette.js'
-import {installTooltips} from './tooltip.js'
+import {installTooltips, pointTip} from './tooltip.js'
+import {caretLine, caretPoint, centredTop, changeFrom, hasLines, normalizeChanges, StepOrigin} from './steps.js'
 import {onAppUpdate} from './update.js'
 import {appOffline, clearOffline, downloadRepo, hasSavedData, importPack, offlineRepos, removeRepo, storageUse} from './offline.js'
 import {highlightBlocks, renderMarkdown, repoResolvers, richSource, sanitize} from './markdown.js'
@@ -63,6 +64,9 @@ const store = {
 }
 
 const mobileQuery = window.matchMedia('(max-width: 760px)')
+// a step to a difference focuses its editor, so the keys go on from there; not on a touch screen, where it could bring up
+// the keyboard
+const stepFocusQuery = window.matchMedia('(hover: hover)')
 const settings = {
     view: store.get('view', null), // null: side-by-side on wide screens, unified on phones
     theme: store.get('theme', DEFAULT_THEME),
@@ -836,6 +840,11 @@ function buildShell() {
     setupSplitter()
     setupPalette()
     window.addEventListener('keydown', onKey, true)
+    // any action but pressing it again (or a modifier, as in Shift+F7) ends what a step past the last difference offered
+    window.addEventListener('keydown', (e) => { if (e.key !== 'F7' && !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) disarmStep() }, true)
+    window.addEventListener('pointerdown', (e) => { if (!e.target.closest?.('#btn-prev-diff, #btn-next-diff')) disarmStep() }, true)
+    window.addEventListener('wheel', disarmStep, {capture: true, passive: true})
+    window.addEventListener('resize', disarmStep)
     mobileQuery.addEventListener('change', () => {
         if (!settings.view) applyView()
         applyFont()
@@ -1272,9 +1281,10 @@ function selectFile(path, push = true) {
     if (i >= 0) openFileAt(i, push)
 }
 
-function stepFile(dir) {
+/** Opens the next (dir 1) or previous (-1) file; `land`: at its first difference (its last, going back), as a step does. */
+function stepFile(dir, land = false) {
     const i = state.index + dir
-    if (i >= 0 && i < state.order.length) openFileAt(i)
+    if (i >= 0 && i < state.order.length) openFileAt(i, true, false, land ? dir : 0)
 }
 
 function reopenFile(keepScroll = true) {
@@ -1297,10 +1307,15 @@ async function fileChanges(f, original, modified, stale) {
     return computeDiff(original, modified, stale)
 }
 
-async function openFileAt(i, push = true, keepScroll = false) {
+/**
+ * Shows file `i` at its first difference (`land` -1: at its last), or where it was with `keepScroll`. A `land` other than
+ * 0 is a step from another file: the difference's editor gets the focus.
+ */
+async function openFileAt(i, push = true, keepScroll = false, land = 0) {
     if (!state.cs) return
     const f = state.order[i]
     if (!f) return
+    disarmStep()
     const id = ++state.fileLoadId
     state.index = i
     state.tree.select(f.path)
@@ -1389,7 +1404,7 @@ async function openFileAt(i, push = true, keepScroll = false) {
             const changes = await fileChanges(f, original, modified, stale)
             if (id !== state.fileLoadId) return
             state.unified?.setModel(null)
-            if (!await showMarkdownPreview(f, original.getValue(), modified.getValue(), changes, labels, id, keepScroll)) return
+            if (!await showMarkdownPreview(f, original.getValue(), modified.getValue(), changes, labels, id, keepScroll, land)) return
         } else if (renderer() === 'sbs') {
             const changes = await fileChanges(f, original, modified, stale)
             if (id !== state.fileLoadId) return
@@ -1397,7 +1412,7 @@ async function openFileAt(i, push = true, keepScroll = false) {
             state.unified?.setModel(null)
             const sc = keepScroll && state.sbs ? state.sbs.right.getScrollTop() : 0
             ensureSbs().setModels(original, modified, changes, labels)
-            if (changes.length && !keepScroll) state.sbs.goTo(0)
+            if (changes.length && !keepScroll) state.sbs.goTo(land < 0 ? changes.length - 1 : 0, land !== 0 && stepFocusQuery.matches)
             else if (sc) state.sbs.right.setScrollTop(sc)
         } else {
             showView('unified')
@@ -1406,11 +1421,13 @@ async function openFileAt(i, push = true, keepScroll = false) {
             $('#uni-head').classList.toggle('aligned', viewMode() === 'sbs')
             const de = ensureUnified()
             de.updateOptions(monacoOptions())
+            state.uniOrigin.from = 'scroll'
             const updated = waitForDiff(de)
             de.setModel({original, modified})
             if (!await updated) throw new DiffTooLarge()
             if (id !== state.fileLoadId) return
-            if (!keepScroll && de.getLineChanges()?.length) de.revealFirstDiff?.()
+            const n = de.getLineChanges()?.length
+            if (!keepScroll && n) uniGoTo(land < 0 ? n - 1 : 0, land !== 0 && stepFocusQuery.matches)
         }
     } catch (e) {
         if (!(e instanceof DiffTooLarge)) throw e
@@ -1455,7 +1472,7 @@ function changedLines(lineChanges) {
 const sourceBlocks = (el) => [...el.querySelectorAll('[data-sl]')].map((e) => ({e, sl: +e.dataset.sl, el: +e.dataset.el}))
 
 /** False when the preview could not show (it then falls back to the code). */
-async function showMarkdownPreview(f, oldText, newText, lineChanges, labels, id, keepScroll) {
+async function showMarkdownPreview(f, oldText, newText, lineChanges, labels, id, keepScroll, land) {
     const {cs, target: t} = state
     const L = changedLines(lineChanges)
     // `map` gives the source line of each rendered line
@@ -1508,7 +1525,7 @@ async function showMarkdownPreview(f, oldText, newText, lineChanges, labels, id,
     state.mdMarks = mdStops(main, lineChanges, f)
     state.mdCur = -1
     if (scroll) main.scrollTop = scroll
-    else if (state.mdMarks.length && both) markCurrent(0, false)
+    else if (state.mdMarks.length && both) markCurrent(land < 0 ? state.mdMarks.length - 1 : 0, false)
     const bodies = [...view.querySelectorAll('.mdp-body')]
     state.mdRefresh = null
     state.mdObserver?.disconnect()
@@ -1591,7 +1608,7 @@ function linkMarkdownPanes(view, [ob, nb], lineChanges) {
     sides.forEach((b, i) => b.addEventListener('scroll', () => {
         if (settings.syncScroll && (!lock || lock === b)) {
             lock = b
-            const ref = b.clientHeight / 3
+            const ref = b.clientHeight / 2
             sides[1 - i].scrollTop = mapY(b.scrollTop + ref, i) - ref
             clearTimeout(lock.t)
             lock.t = setTimeout(() => { lock = null }, 80)
@@ -1630,10 +1647,13 @@ function markCurrent(i, smooth = true) {
     state.mdCur = i
     const el = state.mdMarks[i]
     for (const m of state.mdMarks) m.classList.toggle('md-cur', m === el)
-    // scroll the preview only (scrollIntoView would also move the page on a phone)
+    // scroll the preview only (scrollIntoView would also move the page on a phone): the block in the middle, or near the
+    // top when it is taller than the view
     const box = el?.closest('.mdp-body')
     if (box) {
-        const top = box.scrollTop + el.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientHeight / 3
+        const r = el.getBoundingClientRect(), gap = 3 * lineHeight()
+        const y = box.scrollTop + r.top - box.getBoundingClientRect().top
+        const top = r.height > box.clientHeight - 2 * gap ? y - gap : y + (r.height - box.clientHeight) / 2
         box.scrollTo({top, behavior: smooth ? 'smooth' : 'auto'})
     }
     updateToolbar()
@@ -2549,10 +2569,18 @@ const DIFF_GRACE = 10000
 
 class DiffTooLarge extends Error {}
 
-/** Resolves true on the diff editor's next diff, false when none came in time. */
+/**
+ * Resolves true on the diff editor's next diff, false when none came in time. Monaco also tells of the empty diff a new
+ * pair of models starts with: that one is not waited for.
+ */
 function waitForDiff(de) {
     return new Promise((resolve) => {
-        const d = de.onDidUpdateDiff(() => { d.dispose(); clearTimeout(t); resolve(true) })
+        const d = de.onDidUpdateDiff(() => {
+            if (!de.getLineChanges()) return
+            d.dispose()
+            clearTimeout(t)
+            resolve(true)
+        })
         const t = setTimeout(() => { d.dispose(); resolve(false) }, DIFF_TIME + DIFF_GRACE)
     })
 }
@@ -2604,7 +2632,7 @@ async function diffNow(original, modified) {
 function ensureSbs() {
     if (!state.sbs) {
         state.sbs = new SideBySideViewer($('#view-sbs'), state.monaco, {fontSize: fontSize(), lineHeight: lineHeight(), fontFamily: FONT})
-        state.sbs.onScroll = () => updateToolbar()
+        state.sbs.onMove = () => updateToolbar()
         state.sbs.setOptions({syncScroll: settings.syncScroll, highlight: settings.highlight})
         attachEditor(state.sbs.left)
         attachEditor(state.sbs.right)
@@ -2660,6 +2688,7 @@ function ensureUnified() {
             ...monacoOptions(),
         })
         state.unified.getModifiedEditor().onDidScrollChange(() => updateToolbar())
+        state.uniOrigin = new StepOrigin(state.monaco, [state.unified.getOriginalEditor(), state.unified.getModifiedEditor()], () => updateToolbar())
         fullWidthSelection(state.monaco, state.unified.getModifiedEditor())
         fullWidthSelection(state.monaco, state.unified.getOriginalEditor())
         attachEditor(state.unified.getOriginalEditor())
@@ -2913,6 +2942,7 @@ async function showOutside(loc) {
     }
     ed.setModel(model)
     if (old) { dropRoot(monaco, old.uri); old.dispose() }
+    disarmStep()
     state.outside = {path: loc.path, side: 'outside', ref: loc.ref, lang, ...loc.lib && {lib: loc.lib, text}}
     const t = state.target
     const blob = !loc.lib && `https://github.com/${t.owner}/${t.repo}/blob/${loc.ref}/${loc.path.split('/').map(encodeURIComponent).join('/')}`
@@ -2982,30 +3012,124 @@ function showBinary(f, orig, mod) {
 function diffInfo() {
     if (isShown('md')) {
         const n = state.mdMarks?.length || 0
-        return {count: n, prev: state.mdCur > 0, next: state.mdCur < n - 1}
+        return {count: n, prev: state.mdCur > 0, next: state.mdCur < n - 1, cur: state.mdCur ?? -1}
     }
-    if (!isShown('msg') && !isShown('file')) {
-        if (renderer() === 'sbs' && state.sbs) return {count: state.sbs.count, prev: state.sbs.canStep(-1), next: state.sbs.canStep(1)}
-        if (renderer() === 'monaco' && state.unified) {
-            const n = state.unified.getLineChanges()?.length || 0
-            return {count: n, prev: n > 0, next: n > 0}
-        }
+    if (isShown('sbs')) {
+        const v = state.sbs
+        return {count: v.count, prev: v.canStep(-1), next: v.canStep(1), cur: v.currentIndex()}
     }
-    return {count: 0, prev: false, next: false}
+    if (isShown('unified') && state.unified) {
+        const n = state.unified.getLineChanges()?.length || 0
+        return {count: n, prev: uniStepIndex(-1) >= 0, next: uniStepIndex(1) >= 0, cur: state.uniOrigin.from === 'step' ? state.uniCur : -1}
+    }
+    return {count: 0, prev: false, next: false, cur: -1}
 }
 
+// The unified and aligned views (Monaco's diff editor) step as the side-by-side viewer does (sbs.js). Sides: 'L' the
+// original editor, 'R' the modified. The unified view shows deleted lines in the modified editor, between its lines (they
+// are in the original model, whose editor is hidden there): its caret stays in the modified editor, on the line below a
+// deletion, where Monaco's own Go to Next Difference puts it.
+
+const uniInline = () => viewMode() !== 'sbs'
+const uniEditor = (side) => side === 'L' ? state.unified.getOriginalEditor() : state.unified.getModifiedEditor()
+const uniUserSide = () => !uniInline() && state.lastEditor === state.unified.getOriginalEditor() ? 'L' : 'R'
+
+/** The middle of the 0-based line at `y` px of `ed`'s content, the view zones above a line counted with it. */
+function lineAt(ed, y) {
+    let lo = 1, hi = ed.getModel().getLineCount()
+    while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1
+        if (ed.getTopForLineNumber(mid, true) <= y) lo = mid
+        else hi = mid - 1
+    }
+    return lo - 0.5
+}
+
+/** The change a step in direction `dir` goes to in the unified or aligned view, or -1 (SideBySideViewer._stepIndex). */
+function uniStepIndex(dir) {
+    const changes = normalizeChanges(state.unified.getLineChanges())
+    if (!changes.length) return -1
+    const {from, editor} = state.uniOrigin
+    let i
+    if (from === 'step') i = state.uniCur + dir
+    else if (from === 'caret' && editor.getModel()) {
+        i = changeFrom(changes, editor === state.unified.getOriginalEditor() ? 'L' : 'R', editor.getPosition().lineNumber - 1, dir)
+    } else {
+        const side = uniUserSide(), ed = uniEditor(side), top = ed.getScrollTop()
+        i = changeFrom(changes, side, top < 1 && dir > 0 ? -1 : lineAt(ed, top + ed.getLayoutInfo().height / 2), dir)
+    }
+    return i >= 0 && i < changes.length ? i : -1
+}
+
+/** Change `i` of the unified or aligned view in the middle of the view, the caret at its first line (SideBySideViewer.goTo). */
+function uniGoTo(i, focus = false) {
+    const c = normalizeChanges(state.unified.getLineChanges())[i]
+    if (!c) return
+    const user = uniUserSide()
+    const side = state.uniSide = uniInline() || hasLines(c, user) ? user : hasLines(c, 'L') ? 'L' : 'R'
+    const ed = uniEditor(side)
+    state.uniCur = i
+    // the aligned view scrolls its other editor along
+    state.uniOrigin.step(() => {
+        for (const s of uniInline() ? ['R'] : ['L', 'R']) uniEditor(s).setPosition({lineNumber: caretLine(uniEditor(s), c, s), column: 1})
+        ed.setScrollPosition({scrollTop: centredTop(ed, c, side, lineHeight()), scrollLeft: 0})
+        if (focus) ed.focus()
+    })
+}
+
+/** After a step past the file's last difference (or before its first): {dir, hide}, until the next action. */
+let stepTip = null
+
+function disarmStep() {
+    stepTip?.hide()
+    stepTip = null
+}
+
+/** Where the tip of a step goes: under the caret's line, else under the button. */
+function stepTipPoint(dir) {
+    let ed = null
+    if (isShown('sbs')) ed = state.sbs.caretEditor
+    else if (isShown('unified')) ed = uniEditor(state.uniOrigin.from === 'step' ? state.uniSide : uniUserSide())
+    else if (isShown('file')) ed = state.fileEd
+    if (ed?.getModel()) return caretPoint(ed)
+    const mark = isShown('md') && state.mdMarks?.[state.mdCur]
+    if (mark) {
+        const r = mark.getBoundingClientRect(), b = mark.closest('.mdp-body').getBoundingClientRect()
+        return {x: Math.max(r.left, b.left), y: Math.max(b.top, Math.min(r.bottom, b.bottom - 40))}
+    }
+    const r = $(dir > 0 ? '#btn-next-diff' : '#btn-prev-diff').getBoundingClientRect()
+    return {x: r.left + r.width / 2, y: r.bottom}
+}
+
+/**
+ * Next (dir 1) or Previous (-1) Difference, as in the IDE: the caret at the difference's first line, in the middle of the
+ * view. Past the file's last difference, a tip says to press again, and a second press with nothing else in between
+ * opens the next file at its first difference (the previous file at its last).
+ */
 function stepDiff(dir) {
-    // past the last difference: go on to the next file, as the IDE does on a second F7
-    if (isShown('file')) {
-        stepFile(dir)
-    } else if (isShown('md')) {
+    // the view still shows the file before
+    if ($('#loading-bar').classList.contains('on')) return
+    const again = stepTip?.dir === dir
+    disarmStep()
+    if (again) return stepFile(dir, true)
+    const focus = stepFocusQuery.matches
+    let moved = false
+    if (isShown('md')) {
         const next = state.mdCur + dir
-        if (next < 0 || next >= (state.mdMarks?.length || 0)) stepFile(dir)
-        else markCurrent(next)
-    } else if (renderer() === 'sbs' && state.sbs) {
-        if (!state.sbs.step(dir)) stepFile(dir)
-    } else if (state.unified) {
-        state.unified.goToDiff(dir > 0 ? 'next' : 'previous')
+        moved = next >= 0 && next < (state.mdMarks?.length || 0)
+        if (moved) markCurrent(next)
+    } else if (isShown('sbs')) {
+        moved = state.sbs.step(dir, focus)
+    } else if (isShown('unified') && state.unified) {
+        const i = uniStepIndex(dir)
+        moved = i >= 0
+        if (moved) uniGoTo(i, focus)
+    }
+    if (!moved) {
+        // a file shown outside the changes has none: the press goes on from the changed file it was opened from
+        const more = dir > 0 ? state.index < state.order.length - 1 : state.index > 0
+        const {x, y} = stepTipPoint(dir)
+        stepTip = {dir: more ? dir : 0, hide: pointTip(x, y, more ? `Press again to go to the ${dir > 0 ? 'next' : 'previous'} file` : 'No more differences')}
     }
     updateToolbar()
 }
@@ -3020,8 +3144,7 @@ function updateToolbar() {
     $('#btn-next-diff').disabled = !d.next && last
     $('#btn-prev-file').disabled = first
     $('#btn-next-file').disabled = last
-    const cur = isShown('md') ? state.mdCur ?? -1 : renderer() === 'sbs' && isShown('sbs') ? state.sbs?.currentIndex() ?? -1 : -1
-    $('#st-pos').textContent = cur >= 0 && d.count ? `Difference ${cur + 1} of ${d.count}` : ''
+    $('#st-pos').textContent = d.cur >= 0 && d.count ? `Difference ${d.cur + 1} of ${d.count}` : ''
 }
 
 function setLoading(on) {
@@ -3047,7 +3170,8 @@ function onKey(e) {
     if (e.key !== 'F7' && !isFileKey(e) && state.editing && state.editableFile && e.target.closest?.('.sbs-right, .editor.modified')) return
     if (e.key === 'F7') {
         e.preventDefault()
-        stepDiff(e.shiftKey ? -1 : 1)
+        // a held key does not go on past the tip into the next file
+        if (!(e.repeat && stepTip)) stepDiff(e.shiftKey ? -1 : 1)
     } else if (isFileKey(e)) {
         e.preventDefault()
         stepFile(e.key === 'ArrowRight' ? 1 : -1)

@@ -65,8 +65,14 @@ short, and when the merge base could not be read (the diff is then against the b
 
 ### Keys
 
-F7 and Shift+F7 move between differences, ⌃⇧→ and ⌃⇧← between files on a Mac (Alt+Shift+→ and Alt+Shift+←, or
-Alt+→ and Alt+←, elsewhere, as in IntelliJ), V marks a file viewed, double Shift opens
+F7 and Shift+F7 (or the arrows over the diff) move between differences, as in IntelliJ's diff: the caret goes to the
+start of the difference's first line, in the editor you are in (or the other side, when the difference has no lines
+on yours), which takes the focus (not on a touch screen), and the difference shows in the middle of the view (a `»` by its line number in the
+side-by-side view). A step goes on from the difference last stepped to, from the caret once you move it, or from the
+middle of the view once you scroll. Past a file's last difference, a tip at the caret says *Press again to go to the
+next file*: pressing again, with nothing else in between, opens the next file at its first difference (Shift+F7, the
+previous file at its last); on the last file it says *No more differences*. ⌃⇧→ and ⌃⇧← move between files on a Mac
+(Alt+Shift+→ and Alt+Shift+←, or Alt+→ and Alt+←, elsewhere, as in IntelliJ), V marks a file viewed, double Shift opens
 Search Everywhere (⌘/Ctrl+Shift+A its actions, ⌘/Ctrl+P its files), and ⌘/Ctrl with + − 0 sizes the editor font.
 
 The editors follow IntelliJ's keymap: its macOS keys on a Mac, its Windows/Linux keys elsewhere (the settings, the gear

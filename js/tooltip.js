@@ -40,3 +40,20 @@ export function installTooltips(delay = 300) {
     for (const ev of ['pointerdown', 'keydown', 'wheel']) document.addEventListener(ev, hide, true)
     addEventListener('blur', hide)
 }
+
+/**
+ * A tip in the same style under the point (x, y) of the page, its arrow pointing up at it, until the returned function
+ * hides it: Next Difference's "Press again" at the caret's line. On touch screens too.
+ */
+export function pointTip(x, y, text) {
+    const tip = document.createElement('div')
+    tip.className = 'tip tip-point'
+    tip.setAttribute('role', 'status')
+    tip.textContent = text
+    document.body.appendChild(tip)
+    const w = tip.offsetWidth
+    const left = Math.max(6, Math.min(x - 14, innerWidth - w - 6))
+    tip.style.setProperty('--arrow', `${Math.round(Math.max(8, Math.min(x - left, w - 8)))}px`)
+    tip.style.transform = `translate(${Math.round(left)}px, ${Math.round(y + 7)}px)`
+    return () => tip.remove()
+}

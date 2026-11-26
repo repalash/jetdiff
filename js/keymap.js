@@ -55,6 +55,13 @@ const JETBRAINS = [
     [FORWARD, 'cmd+alt+right', null],
 ]
 
+// F7 / Shift+F7 step through the differences (main.js) in either keymap: in the unified view's diff editor, Monaco's own
+// would also open its Accessible Diff Viewer
+const APP_REMOVED = [
+    ['editor.action.accessibleDiffViewer.next', 'f7', 'f7'],
+    ['editor.action.accessibleDiffViewer.prev', 'shift+f7', 'shift+f7'],
+]
+
 // Monaco's own bindings on the keys above, removed so that a key never does both: [command, macOS key, other key],
 // with the keys of Windows and of Linux (Monaco's defaults differ between them). Those of widgets (the find and
 // replace fields, suggestions, hovers) stay: they apply only while the widget has the focus.
@@ -84,6 +91,7 @@ const JETBRAINS_REMOVED = [
     // Alt+Shift+←/→ step files (main.js), as IntelliJ's Compare Previous/Next File
     ['editor.action.smartSelect.shrink', null, 'shift+alt+left'],
     ['editor.action.smartSelect.expand', null, 'shift+alt+right'],
+    ...APP_REMOVED,
 ]
 
 const VSCODE = [
@@ -95,6 +103,7 @@ const VSCODE_REMOVED = [
     // the app's file keys in either keymap (main.js)
     ['editor.action.smartSelect.shrink', null, 'shift+alt+left'],
     ['editor.action.smartSelect.expand', null, 'shift+alt+right'],
+    ...APP_REMOVED,
 ]
 
 const KEYS = {jetbrains: [JETBRAINS, JETBRAINS_REMOVED], vscode: [VSCODE, VSCODE_REMOVED]}

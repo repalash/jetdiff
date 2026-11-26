@@ -39,9 +39,9 @@ test('the JetBrains keys edit in the editable side; the VS Code keymap gives Mon
     expect(await headText(page, path)).toBe('one\nthree\ntwo\n')
     await page.keyboard.press('Control+W')
     expect(await selected(page)).toBe('three')
-    // F7 still steps through the differences from the editor
+    // F7 still steps through the differences from the editor: back up from the caret to the removed first line
     await page.keyboard.press('Escape')
-    await page.keyboard.press('F7')
+    await page.keyboard.press('Shift+F7')
     await expect(page.locator('#st-pos')).toHaveText(/Difference 1 of/)
 
     await page.locator('#btn-app').click()

@@ -1,20 +1,5 @@
 import {DIFF_COLORS, EDITOR_COLORS, fullWidthSelection, HOVER} from './editor.js'
-
-/**
- * Monaco line changes (1-based, `*EndLineNumber` 0 for an empty side) as 0-based half-open ranges
- * `{l0, l1, r0, r1, type, chars}`. An empty side is a point: l0 === l1 is the boundary after line l0.
- */
-function normalizeChanges(lineChanges) {
-    return (lineChanges || []).map((c) => {
-        const insertion = c.originalEndLineNumber === 0
-        const deletion = c.modifiedEndLineNumber === 0
-        const l0 = insertion ? c.originalStartLineNumber : c.originalStartLineNumber - 1
-        const l1 = insertion ? l0 : c.originalEndLineNumber
-        const r0 = deletion ? c.modifiedStartLineNumber : c.modifiedStartLineNumber - 1
-        const r1 = deletion ? r0 : c.modifiedEndLineNumber
-        return {l0, l1, r0, r1, type: insertion ? 'ins' : deletion ? 'del' : 'mod', chars: c.charChanges || []}
-    })
-}
+import {caretLine, centredTop, changeFrom, hasLines, normalizeChanges, StepOrigin} from './steps.js'
 
 /** Maps a fractional 0-based line position from one side to the other through the changes, piecewise linearly. */
 function mapPosition(changes, x, fromLeft) {
@@ -38,8 +23,7 @@ export class SideBySideViewer {
         this.fontFamily = fontFamily
         this.expect = {L: null, R: null}
         this.cur = -1
-        this.userScrolled = true
-        this.onScroll = null
+        this.onMove = null // scrolled, or the caret moved
         this.syncScroll = true
         this.highlight = 'words' // 'words' | 'lines' | 'none', as in the IDE's "Highlighting Differences"
 
@@ -116,12 +100,15 @@ export class SideBySideViewer {
             fullWidthSelection(monaco, ed)
             this.disposables.push(
                 ed.onDidFocusEditorWidget(() => { this.lastFocused = ed; this._requestDraw() }),
+                // Monaco tells of the blur a moment after the other side took the focus
+                ed.onDidBlurEditorWidget(() => this._requestDraw()),
                 ed.onDidScrollChange((e) => this._scrolled(side, e)),
                 ed.onDidLayoutChange(() => this.draw()),
                 // the caret row's line number is brighter, as in the IDE
                 ed.onDidChangeCursorPosition(() => this._requestDraw()),
             )
         }
+        this.origin = new StepOrigin(monaco, [this.left, this.right], () => { this._requestDraw(); this.onMove?.() })
         this.decoL = this.left.createDecorationsCollection()
         this.decoR = this.right.createDecorationsCollection()
         this.resizeObs = new ResizeObserver(() => this.draw())
@@ -134,13 +121,14 @@ export class SideBySideViewer {
     setModels(original, modified, lineChanges, labels = {}) {
         this.changes = normalizeChanges(lineChanges)
         this.cur = -1
-        this.userScrolled = true
+        // before the models change: a scroll on the way must not read the old caret
+        this.origin.from = 'scroll'
         this.left.setModel(original)
         this.right.setModel(modified)
         this.emptyL = original.getValueLength() === 0
         this.emptyR = modified.getValueLength() === 0
         // an added or deleted file shows as one editor with its own line numbers, as in the IDE
-        const one = this.emptyL && !this.emptyR ? 'R' : this.emptyR && !this.emptyL ? 'L' : null
+        const one = this.one = this.emptyL && !this.emptyR ? 'R' : this.emptyR && !this.emptyL ? 'L' : null
         this.root.classList.toggle('one-L', one === 'L')
         this.root.classList.toggle('one-R', one === 'R')
         for (const side of ['L', 'R']) this._ed(side).updateOptions({lineNumbers: one === side ? 'on' : 'off', lineNumbersMinChars: one === side ? 4 : 0})
@@ -241,12 +229,11 @@ export class SideBySideViewer {
         const exp = this.expect[side]
         if (exp && Math.abs(ed.getScrollTop() - exp.top) < 1 && Math.abs(ed.getScrollLeft() - exp.left) < 1) {
             this.expect[side] = null
-        } else if (e.scrollTopChanged || e.scrollLeftChanged) {
-            if (!this.navigating) this.userScrolled = true
-            if (this.syncScroll) this._sync(side, side === 'L' ? 'R' : 'L')
+        } else if ((e.scrollTopChanged || e.scrollLeftChanged) && this.syncScroll) {
+            this._sync(side, side === 'L' ? 'R' : 'L')
         }
         this._requestDraw()
-        this.onScroll?.()
+        this.onMove?.()
     }
 
     _sync(fromSide, toSide) {
@@ -328,69 +315,86 @@ export class SideBySideViewer {
         }
         drawNums(this.left, this.emptyL, sL, x0 - 8, 'right')
         drawNums(this.right, this.emptyR, sR, W - 8, 'right')
+        // the line a step went to, as in the IDE: a » before its number, until the user scrolls or moves the caret
+        if (this.origin.from === 'step' && this.stepSide && !this.one) {
+            const left = this.stepSide === 'L'
+            const line = this._ed(this.stepSide).getPosition().lineNumber - 1
+            // smaller than the numbers, in the 8px their column leaves on its left
+            ctx.font = `${this.fontSize - 3}px ${this.fontFamily}`
+            ctx.textAlign = 'left'
+            ctx.fillStyle = EDITOR_COLORS.lineNumberCaret
+            ctx.fillText('»', left ? 1 : x1 + 1, line * lh - (left ? sL : sR) + lh / 2 + 0.5)
+        }
     }
 
     get count() { return this.changes.length }
 
-    /**
-     * The index of the first change past the reading line in direction `dir`: a third down the right editor, as goTo
-     * shows a change. Scrolled to the top, a step down starts from the top (goTo leaves the changes above that line
-     * there), and a step up still goes to a change shown above the line before leaving the file.
-     */
-    _refIndex(dir) {
-        const h = this.right.getLayoutInfo().height
-        const top = this.right.getScrollTop()
-        const ref = top < 1 && dir > 0 ? -1 : (top + h / 3) / this.lineHeight
-        if (dir > 0) return this.changes.findIndex((c) => c.r0 > ref + 0.05)
-        for (let i = this.changes.length - 1; i >= 0; i--) if (this.changes[i].r0 < ref - 0.05) return i
-        return -1
+    /** The side the user is in: the one last focused, or the one an added or deleted file shows. */
+    _userSide() {
+        return this.one || (this.lastFocused === this.left ? 'L' : 'R')
     }
 
-    /** The change a step in direction `dir` (1 or -1) goes to, or -1 at the ends. */
+    /**
+     * The change a step in direction `dir` (1 or -1) goes to, or -1 at the ends: the next from the change last gone to,
+     * else from the caret the user moved, else from the middle of the view the user scrolled (scrolled to the top, a step
+     * down starts from the top).
+     */
     _stepIndex(dir) {
-        const i = this.userScrolled ? this._refIndex(dir) : this.cur + dir
+        const {from, editor} = this.origin
+        let i
+        if (from === 'step') i = this.cur + dir
+        else if (from === 'caret') i = changeFrom(this.changes, editor === this.left ? 'L' : 'R', editor.getPosition().lineNumber - 1, dir)
+        else {
+            const side = this._userSide(), ed = this._ed(side), top = ed.getScrollTop()
+            i = changeFrom(this.changes, side, top < 1 && dir > 0 ? -1 : (top + ed.getLayoutInfo().height / 2) / this.lineHeight, dir)
+        }
         return i >= 0 && i < this.changes.length ? i : -1
     }
 
     /** Moves to the next (dir 1) or previous (dir -1) change; returns false at the ends. */
-    step(dir) {
+    step(dir, focus) {
         const i = this._stepIndex(dir)
         if (i < 0) return false
-        this.goTo(i)
+        this.goTo(i, focus)
         return true
     }
 
     canStep(dir) { return this._stepIndex(dir) >= 0 }
 
-    goTo(i) {
+    /**
+     * Shows change `i` in the middle of the view, the caret at column 1 of its first line on each side (the line below,
+     * on a side without lines), and `focus`es the side the user is in, or the side with lines when that one has none.
+     */
+    goTo(i, focus = false) {
         const c = this.changes[i]
         if (!c) return
         this.cur = i
-        this.navigating = true
-        const useRight = c.r1 > c.r0 || c.l1 === c.l0
-        const ed = useRight ? this.right : this.left
-        const line = useRight ? c.r0 : c.l0
-        const h = ed.getLayoutInfo().height
-        ed.setScrollTop(Math.max(0, line * this.lineHeight - h / 3))
-        if (this.syncScroll) this._sync(useRight ? 'R' : 'L', useRight ? 'L' : 'R')
-        else {
-            const other = useRight ? this.left : this.right
-            other.setScrollTop(Math.max(0, (useRight ? c.l0 : c.r0) * this.lineHeight - h / 3))
-        }
-        this.navigating = false
-        this.userScrolled = false
+        const user = this._userSide()
+        const side = this.stepSide = hasLines(c, user) ? user : hasLines(c, 'L') ? 'L' : 'R'
+        const other = side === 'L' ? 'R' : 'L'
+        const ed = this._ed(side), lh = this.lineHeight
+        this.origin.step(() => {
+            for (const s of ['L', 'R']) this._ed(s).setPosition({lineNumber: caretLine(this._ed(s), c, s), column: 1})
+            ed.setScrollPosition({scrollTop: centredTop(ed, c, side, lh), scrollLeft: 0})
+            if (this.syncScroll) this._sync(side, other)
+            else this._ed(other).setScrollPosition({scrollTop: centredTop(this._ed(other), c, other, lh), scrollLeft: 0})
+            if (focus) ed.focus()
+        })
         this.draw()
-        this.onScroll?.()
+        this.onMove?.()
     }
 
-    /** The index of the change last navigated to, or -1 once the user scrolled. */
+    /** The editor whose caret the user follows: the one the last step went to, else the one the user is in. */
+    get caretEditor() { return this._ed(this.origin.from === 'step' ? this.stepSide : this._userSide()) }
+
+    /** The index of the change last navigated to, or -1 once the user scrolled or moved the caret. */
     currentIndex() {
-        return this.userScrolled ? -1 : this.cur
+        return this.origin.from === 'step' ? this.cur : -1
     }
 
     setFont(fontSize, lineHeight) {
         // the relayout scrolls; a difference that was current stays current
-        const keep = !this.userScrolled && this.cur >= 0 ? this.cur : -1
+        const keep = this.currentIndex()
         if (keep >= 0) requestAnimationFrame(() => this.goTo(keep))
         this.fontSize = fontSize
         this.lineHeight = lineHeight
@@ -405,6 +409,7 @@ export class SideBySideViewer {
         cancelAnimationFrame(this._raf)
         this.resizeObs.disconnect()
         this.disposables.forEach((d) => d.dispose())
+        this.origin.dispose()
         this.left.dispose()
         this.right.dispose()
         this.root.remove()

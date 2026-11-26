@@ -25,7 +25,7 @@ export const FILES = [
 export const SHELL_FILES = [
     './', './404', './style.css', './manifest.webmanifest', './docs/hero.webp', './docs/phone.webp',
     './js/main.js', './js/github.js', './js/editor.js', './js/themes.js', './js/sbs.js', './js/tree.js', './js/icons.js',
-    './js/log.js', './js/palette.js', './js/markdown.js', './js/tooltip.js', './js/offline.js', './js/util.js',
+    './js/log.js', './js/palette.js', './js/markdown.js', './js/tooltip.js', './js/steps.js', './js/offline.js', './js/util.js',
     './js/update.js', './js/redirect.js', './js/support.js', './js/keymap.js', './js/goto.js', './js/declarations.js', './js/typescript.js',
     './icons/icon.svg', './icons/icon-small.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
 ]
