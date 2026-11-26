@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // npm start: serves the app from the repository root on PORT (default 3000), as the Worker serves the build: the
-// libraries at vendor/ (from node_modules) and sw.js with its release
+// libraries at vendor/ (from node_modules), sw.js with its release, and the same security headers
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import {checkVendor, ROOT as root, serviceWorker, vendor} from './site.mjs'
+import {securityHeaders} from '../worker/headers.js'
 
 const port = +(process.env.PORT || 3000)
 const types = {
@@ -26,7 +27,7 @@ http.createServer((req, res) => {
         pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname)
     } catch { return res.writeHead(400).end() } // a malformed escape
     const send = (status, type, {file, text}) => {
-        res.writeHead(status, {'content-type': type, 'cache-control': 'no-cache'})
+        res.writeHead(status, {...securityHeaders(type, req.headers['sec-fetch-dest'] === 'document'), 'content-type': type, 'cache-control': 'no-cache'})
         if (file) fs.createReadStream(file).pipe(res)
         else res.end(text)
     }

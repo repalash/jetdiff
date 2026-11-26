@@ -1,8 +1,8 @@
 // Serves the static assets (dist/). Running first on every request gives request logs (Workers Logs, without the
-// query) and adds what the asset server does not: the www redirect, sign-in (auth.js) and a few security headers.
+// query) and adds what the asset server does not: the www redirect, sign-in (auth.js) and the security headers, with
+// the Content Security Policy (headers.js).
 import {auth} from './auth.js'
-
-const HEADERS = {'x-content-type-options': 'nosniff', 'referrer-policy': 'strict-origin-when-cross-origin'}
+import {securityHeaders} from './headers.js'
 
 export default {
     async fetch(request, env) {
@@ -13,7 +13,8 @@ export default {
         }
         const start = Date.now()
         const res = url.pathname.startsWith('/auth/') ? await auth(request, env, url) : await asset(request, env)
-        for (const [k, v] of Object.entries(HEADERS)) res.headers.set(k, v)
+        const headers = securityHeaders(res.headers.get('content-type'), request.headers.get('sec-fetch-dest') === 'document')
+        for (const [k, v] of Object.entries(headers)) res.headers.set(k, v)
         log(request, url, res, start)
         return res
     },

@@ -11,7 +11,7 @@ test.use({serviceWorkers: 'allow'})
 const GITHUB_HOSTS = ['api.github.com', 'avatars.githubusercontent.com']
 const PNG = fs.readFileSync(new URL('../icons/icon-192.png', import.meta.url))
 
-test('index.html names the installed libraries', async () => {
+test('index.html names the installed libraries, and the policy allows its import map', async () => {
     expect(await checkVendor()).toBeNull()
 })
 

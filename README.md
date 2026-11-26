@@ -129,8 +129,9 @@ AGENTS.md describes the layout and the conventions. There is no bundler: the dev
 and the libraries from `node_modules` at `vendor/<name>@<version>/`, the paths the build copies them to. The service
 worker keeps the release it installed, so with `npm start` a change shows after the next reload brings the new release
 in (or with *Update on reload* in the browser's developer tools). After changing a library's version, run
-`npm run vendor`: it writes the versions into `index.html` (the import map and the font stylesheets); the dev server
-and the build refuse to start until they match `node_modules`. `js/themes.js` is generated from
+`npm run vendor`: it writes the versions into `index.html` (the import map and the font stylesheets) and the import
+map's hash into the Content Security Policy (`worker/headers.js`); the dev server and the build refuse to start until
+they match `node_modules`. `js/themes.js` is generated from
 [Material Theme UI Lite](https://github.com/AtomMaterialUI/material-theme-ui-lite):
 
 ```sh
@@ -146,8 +147,10 @@ npm run themes -- /tmp/mtui
 them with wrangler. GitHub Actions deploys `main` after the tests pass (`.github/workflows/ci.yml`), with the repository
 secrets `CLOUDFLARE_API_TOKEN` (an account token with *Individual Workers Editor* on the jetdiff Worker only) and
 `CLOUDFLARE_ACCOUNT_ID`, and optionally `APP_CLIENT_SECRET` to update the GitHub App's client secret. The domains are
-attached to the Worker in the Cloudflare dashboard, so the token needs no zone or DNS rights. The Worker runs first on each request for request logs, the `www` redirect and a few security headers.
-Any static host works too: serve `dist/` after `npm run build`, with `404.html` for missing paths.
+attached to the Worker in the Cloudflare dashboard, so the token needs no zone or DNS rights. The Worker runs first on each request for request logs, the `www` redirect and the security headers, with a Content
+Security Policy on the pages (`worker/headers.js`).
+Any static host works too: serve `dist/` after `npm run build`, with `404.html` for missing paths and, for the
+policy, the headers of `worker/headers.js`.
 
 Sign in with GitHub needs the Worker and a GitHub App (`worker/auth.js`): create the app with the callback URL
 `https://<your domain>/auth/callback`, *Expire user authorization tokens* on, no webhook, and the repository

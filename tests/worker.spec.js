@@ -1,5 +1,6 @@
 import {test, expect} from '@playwright/test'
 import worker from '../worker/index.js'
+import {CONTENT_SECURITY_POLICY} from '../worker/headers.js'
 
 const env = {ASSETS: {fetch: async () => new Response('asset')}, GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'secret', GITHUB_APP_SLUG: 'jetdiff'}
 const get = (path, init = {}, e = env) => worker.fetch(new Request('https://jetdiff.com' + path, init), e)
@@ -23,6 +24,19 @@ test('www redirects to the bare domain, and assets get the security headers', as
     const page = await get('/')
     expect(await page.text()).toBe('asset')
     expect(page.headers.get('x-content-type-options')).toBe('nosniff')
+})
+
+test('pages get the Content Security Policy, also when revalidated, and other files do not need it', async () => {
+    const typed = (type, status = 200) => ({...env, ASSETS: {fetch: async () => new Response(status === 304 ? null : 'x', {status, headers: type ? {'content-type': type} : {}})}})
+    const page = await worker.fetch(new Request('https://jetdiff.com/?pr=a/b/1'), typed('text/html; charset=utf-8'))
+    expect(page.headers.get('content-security-policy')).toBe(CONTENT_SECURITY_POLICY)
+    expect(CONTENT_SECURITY_POLICY).toContain("script-src 'self' 'sha256-")
+    expect(CONTENT_SECURITY_POLICY).not.toMatch(/script-src[^;]*'unsafe-(inline|eval)'/)
+    const revalidated = await worker.fetch(new Request('https://jetdiff.com/', {headers: {'sec-fetch-dest': 'document'}}), typed(null, 304))
+    expect(revalidated.headers.get('content-security-policy')).toBe(CONTENT_SECURITY_POLICY)
+    const script = await worker.fetch(new Request('https://jetdiff.com/js/main.js'), typed('text/javascript'))
+    expect(script.headers.get('content-security-policy')).toBeNull()
+    expect(script.headers.get('x-content-type-options')).toBe('nosniff')
 })
 
 test('sign-in is off until the app is set up', async () => {

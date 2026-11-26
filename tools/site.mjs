@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // What the site serves, shared by the dev server (serve.mjs) and the build (build.mjs): the app's own files, the
 // libraries copied as they are from node_modules to vendor/<name>@<version>/, and the service worker with its release.
-// `npm run vendor` writes the libraries' versions into index.html (the import map, the font stylesheets); run it after
-// changing a library's version.
+// `npm run vendor` writes the libraries' versions into index.html (the import map, the font stylesheets) and the import
+// map's hash into the Content Security Policy (worker/headers.js); run it after changing a library's version.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -10,6 +10,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url'
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const NODE_MODULES = path.join(ROOT, 'node_modules')
+const HEADERS_MODULE = path.join(ROOT, 'worker/headers.js')
 
 /** The app's own files and folders, served as they are (sw.js is written: serviceWorker()). */
 export const FILES = [
@@ -22,7 +23,7 @@ export const SHELL_FILES = [
     './', './index.html', './404.html', './style.css', './manifest.webmanifest', './docs/hero.webp', './docs/phone.webp',
     './js/main.js', './js/github.js', './js/editor.js', './js/themes.js', './js/sbs.js', './js/tree.js', './js/icons.js',
     './js/log.js', './js/palette.js', './js/markdown.js', './js/tooltip.js', './js/offline.js', './js/util.js',
-    './js/update.js',
+    './js/update.js', './js/redirect.js',
     './icons/icon.svg', './icons/icon-small.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
 ]
 
@@ -140,8 +141,10 @@ function listFiles(dir, rel = '') {
     return out
 }
 
+// index.html's import map: the one inline script of the app, allowed by its hash (worker/headers.js)
 const IMPORT_MAP = /(<script type="importmap">)([\s\S]*?)(<\/script>)/
 const importMapText = () => '\n' + JSON.stringify(vendor().importMap, null, 4).replace(/^/gm, '    ') + '\n    '
+export const scriptHash = (text) => `sha256-${crypto.createHash('sha256').update(text).digest('base64')}`
 
 /** index.html with the libraries' current import map and versions. */
 function currentIndex(html) {
@@ -151,10 +154,12 @@ function currentIndex(html) {
         .replace(/vendor\/((?:@[\w.-]+\/)?[\w.-]+)@[^/]+\//g, (m, name) => `vendor/${name}@${versions.get(name) ?? pkg(name).version}/`)
 }
 
-/** Why index.html does not match node_modules (run npm run vendor), or null. */
+/** Why index.html or the Content Security Policy does not match node_modules (run npm run vendor), or null. */
 export async function checkVendor() {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')
     if (currentIndex(html) !== html) return 'index.html does not name the installed libraries: run npm run vendor'
+    const {IMPORT_MAP_HASH} = await import(pathToFileURL(HEADERS_MODULE).href)
+    if (IMPORT_MAP_HASH !== scriptHash(html.match(IMPORT_MAP)[2])) return 'IMPORT_MAP_HASH in worker/headers.js is not the import map\'s: run npm run vendor'
     for (const s of vendor().stylesheets) if (!html.includes(`href="./${s}"`)) return `index.html does not link ${s}`
     return null
 }
@@ -180,5 +185,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const file = path.join(ROOT, 'index.html')
     const html = currentIndex(fs.readFileSync(file, 'utf8'))
     fs.writeFileSync(file, html)
-    console.log(`index.html names ${[...packages.values()].map((p) => `${p.name}@${p.version}`).join(', ')}`)
+    const headers = fs.readFileSync(HEADERS_MODULE, 'utf8')
+    fs.writeFileSync(HEADERS_MODULE, headers.replace(/(export const IMPORT_MAP_HASH = ')[^']*(')/, `$1${scriptHash(html.match(IMPORT_MAP)[2])}$2`))
+    console.log(`index.html and worker/headers.js name ${[...packages.values()].map((p) => `${p.name}@${p.version}`).join(', ')}`)
 }
