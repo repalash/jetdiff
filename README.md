@@ -19,7 +19,8 @@ gets a message saying so.
   phone).
 - **Changed-files tree** grouped by directory, with Viewed checkboxes that sync with GitHub's own when signed in.
 - **Commits**: a log with a graph line; select a commit or a range to see only its changes.
-- **Timeline**: the description, comments and reviews with their inline threads, rendered as Markdown.
+- **Timeline**: the description, comments and reviews with their inline threads, rendered as Markdown, with the
+  reactions to the description and the comments (counts only: GitHub's summary does not say who reacted).
 - **Markdown preview** for `.md` files, with the changed words highlighted and the two versions kept side by side.
 - **Quick edits**: edit the PR's files in place and commit them to its branch, with Amend and Undo.
 - **Search Everywhere** (double Shift) for files, actions, settings, commits and pull requests.

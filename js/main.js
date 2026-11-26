@@ -1639,7 +1639,19 @@ const REVIEW_STATES = {
     DISMISSED: ['had a review dismissed', ''],
 }
 
-async function timelineHtml(cs, {comments, reviews, inline}, desc) {
+// GitHub's reactions, in the order it shows them
+const REACTIONS = [['+1', '👍', 'thumbs up'], ['-1', '👎', 'thumbs down'], ['laugh', '😄', 'laugh'], ['hooray', '🎉', 'hooray'],
+    ['confused', '😕', 'confused'], ['heart', '❤️', 'heart'], ['rocket', '🚀', 'rocket'], ['eyes', '👀', 'eyes']]
+
+/** The reactions to a description or a comment, from the summary GitHub gives with it: counts, not who reacted. */
+function reactionsHtml(r) {
+    const on = REACTIONS.filter(([k]) => r?.[k] > 0)
+    if (!on.length) return ''
+    const people = (n) => n === 1 ? '1 person' : `${n} people`
+    return `<div class="tl-reacts">${on.map(([k, emoji, name]) => `<span class="tl-react" title="${people(+r[k])} reacted with ${name}">${emoji}<span>${+r[k]}</span></span>`).join('')}</div>`
+}
+
+async function timelineHtml(cs, {comments, reviews, inline, reactions}, desc) {
     const pr = cs.pr
     const who = (u, name) => u
         ? `<img class="tl-av" src="${esc(u.avatar_url)}${u.avatar_url?.includes('?') ? '&' : '?'}s=48" alt="" loading="lazy" crossorigin="anonymous"><b>${esc(u.login)}</b>`
@@ -1676,7 +1688,7 @@ async function timelineHtml(cs, {comments, reviews, inline}, desc) {
         const line = th[0].line || th[0].original_line
         return `<div class="tl-thread"><button class="tl-path" data-path="${esc(th[0].path)}">${fileIcon(th[0].path)}<span>${esc(th[0].path)}${line ? `:${esc(line)}` : ''}</span></button>
                     ${hunk(th[0].diff_hunk)}
-                    ${th.map((c) => `<div class="tl-reply"><div class="tl-meta">${who(c.user)} ${when(c.created_at)}</div><article class="md">${threadBodies.get(c.id)}</article></div>`).join('')}</div>`
+                    ${th.map((c) => `<div class="tl-reply"><div class="tl-meta">${who(c.user)} ${when(c.created_at)}</div><article class="md">${threadBodies.get(c.id)}</article>${reactionsHtml(c.reactions)}</div>`).join('')}</div>`
     }
     let out = ''
     for (let i = 0; i < ev.length; i++) {
@@ -1690,7 +1702,7 @@ async function timelineHtml(cs, {comments, reviews, inline}, desc) {
                 <ul>${group.map((c) => `<li data-sha="${esc(c.sha)}" title="Open this commit's changes"><span class="tl-cmsg">${esc(subject(c))}</span><code>${short(c.sha)}</code></li>`).join('')}</ul></div>`
         } else if (e.kind === 'comment') {
             out += `<div class="tl-item tl-card"><div class="tl-meta">${who(e.c.user)} <span class="dim">commented</span> ${when(e.t)}</div>
-                <article class="md tl-body">${bodies[i]}</article></div>`
+                <article class="md tl-body">${bodies[i]}</article>${reactionsHtml(e.c.reactions)}</div>`
         } else {
             const [label, cls] = REVIEW_STATES[e.c.state] || [esc(String(e.c.state).toLowerCase()), '']
             out += `<div class="tl-item tl-card tl-review ${cls}"><div class="tl-meta">${who(e.c.user)} <span class="tl-state ${cls}">${label}</span> ${when(e.t)}</div>
@@ -1704,7 +1716,7 @@ async function timelineHtml(cs, {comments, reviews, inline}, desc) {
             <div class="tl-sub"><span class="state-pill st-${esc(s)}">${esc(cap(s))}</span>
             <span><b>${esc(pr.user?.login || '')}</b> ${pr.merged_at ? 'merged' : 'wants to merge'} ${plural(cs.commits?.length || 0, 'commit')} into <code>${esc(pr.base.ref)}</code> from <code>${esc(pr.head.label)}</code></span></div></header>
         <div class="tl-item tl-card tl-desc"><div class="tl-meta">${who(pr.user)} <span class="dim">opened this pull request</span> ${when(pr.created_at)}</div>
-            <article class="md tl-body">${desc || '<p class="dim">No description provided.</p>'}</article></div>
+            <article class="md tl-body">${desc || '<p class="dim">No description provided.</p>'}</article>${reactionsHtml(reactions)}</div>
         ${out}
         <div class="tl-end dim">${plural(comments.length, 'comment')} · ${plural(reviewCount(reviews), 'review')} · <a href="${esc(githubUrl(pr.html_url))}" target="_blank" rel="noopener">Open PR on GitHub</a></div>
     </div>`

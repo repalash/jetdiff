@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import {test, expect, ready, FIXTURE_DIR, PR} from './fixture.js'
+import {test, expect, ready, recorded, FIXTURE_DIR, PR} from './fixture.js'
 
 const fileParam = (page) => new URL(page.url()).searchParams.get('file')
 
@@ -62,6 +62,27 @@ test('the timeline shows the description and the conversation', async ({page}) =
     await page.locator('#pr-timeline').click()
     await expect(page.locator('#tab-timeline')).toHaveClass(/active/)
     await expect(page.locator('#timeline-host .md').first()).toContainText('sandboxed')
+    // the recorded comment has none, and the recording has no reactions to the description
+    await expect(page.locator('.tl-react')).toHaveCount(0)
+})
+
+test('the timeline shows the reactions to the description, the comments and the inline comments', async ({page}) => {
+    const R = '/repos/repalash/threepipe', [comment] = recorded(`${R}/issues/193/comments?per_page=100&page=1`)
+    const at = comment.created_at
+    page.github.handle(({path}) => ({
+        [`${R}/issues/193`]: {number: 193, reactions: {total_count: 2, '+1': 1, eyes: 1, heart: 0}},
+        [`${R}/issues/193/comments?per_page=100&page=1`]: [{...comment, reactions: {total_count: 3, '+1': 3}}],
+        [`${R}/pulls/193/reviews?per_page=100&page=1`]: [{id: 7, user: comment.user, state: 'COMMENTED', body: '', submitted_at: at}],
+        [`${R}/pulls/193/comments?per_page=100&page=1`]: [{id: 8, pull_request_review_id: 7, user: comment.user, path: 'CHANGELOG.md', line: 3,
+            diff_hunk: '', body_html: '<p>Inline</p>', created_at: at, reactions: {total_count: 1, rocket: 1}}],
+    })[path])
+    await page.goto(`./?pr=${PR}`)
+    await ready(page)
+    await page.locator('#pr-timeline').click()
+    await expect(page.locator('.tl-desc .tl-react')).toHaveText(['👍1', '👀1'])
+    await expect(page.locator('.tl-desc .tl-react').first()).toHaveAttribute('title', '1 person reacted with thumbs up')
+    await expect(page.locator('.tl-card:not(.tl-desc, .tl-review) .tl-react')).toHaveText(['👍3'])
+    await expect(page.locator('.tl-reply .tl-react')).toHaveText(['🚀1'])
 })
 
 test('Search Everywhere opens a file', async ({page}) => {

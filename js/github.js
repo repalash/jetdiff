@@ -802,16 +802,20 @@ export async function getGitCommit(owner, repo, sha) {
     return json(`/repos/${owner}/${repo}/git/commits/${sha}`)
 }
 
-/** `{comments, reviews, inline}` of a PR, bodies with GitHub's HTML. */
+/**
+ * `{comments, reviews, inline, reactions}` of a PR, bodies with GitHub's HTML; `reactions` are the description's (the
+ * pull request answer has none, its issue has), null where they could not be read.
+ */
 export async function getTimeline(owner, repo, number, {signal} = {}) {
     const R = `/repos/${owner}/${repo}`
     const list = (path) => paginate(`${R}/${path}`, 5, {accept: FULL, signal})
-    const [comments, reviews, inline] = await Promise.all([
+    const [comments, reviews, inline, issue] = await Promise.all([
         list(`issues/${number}/comments`),
         list(`pulls/${number}/reviews`),
         list(`pulls/${number}/comments`).catch(() => []),
+        json(`${R}/issues/${number}`, {signal}).catch(() => null),
     ])
-    return {comments, reviews, inline}
+    return {comments, reviews, inline, reactions: issue?.reactions || null}
 }
 
 /** All open pull requests ({number, title}), from the REST list, which has no search limit. */
