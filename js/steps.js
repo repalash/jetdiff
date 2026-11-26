@@ -21,8 +21,6 @@ export function normalizeChanges(lineChanges) {
 /** A change's 0-based lines on a side ('L' or 'R'): [first, end), empty for a point. */
 const linesOn = (c, side) => (side === 'L' ? [c.l0, c.l1] : [c.r0, c.r1])
 
-export const hasLines = (c, side) => { const [a, b] = linesOn(c, side); return b > a }
-
 /**
  * The change a step in direction `dir` goes to from 0-based line `at` of a side, or -1: the first starting below it, or
  * the last ending above it. A change at `at` (a point's line is the one below it, where its caret goes) is the current

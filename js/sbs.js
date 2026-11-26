@@ -1,5 +1,5 @@
 import {DIFF_COLORS, EDITOR_COLORS, fullWidthSelection, HOVER} from './editor.js'
-import {caretLine, centredTop, changeFrom, hasLines, normalizeChanges, StepOrigin} from './steps.js'
+import {caretLine, centredTop, changeFrom, normalizeChanges, StepOrigin} from './steps.js'
 
 /** Maps a fractional 0-based line position from one side to the other through the changes, piecewise linearly. */
 function mapPosition(changes, x, fromLeft) {
@@ -370,7 +370,8 @@ export class SideBySideViewer {
         if (!c) return
         this.cur = i
         const user = this._userSide()
-        const side = this.stepSide = hasLines(c, user) ? user : hasLines(c, 'L') ? 'L' : 'R'
+        // the side the user is in, as in the IDE: on a side without lines in the change, the caret goes where it is
+        const side = this.stepSide = user
         const other = side === 'L' ? 'R' : 'L'
         const ed = this._ed(side), lh = this.lineHeight
         this.origin.step(() => {

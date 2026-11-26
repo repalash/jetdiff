@@ -27,6 +27,7 @@ they are, and the build only copies them, with the libraries from `node_modules`
 | `js/main.js` | the app: start page, toolbar, panels, settings, edits and commits, offline UI |
 | `js/github.js` | GitHub API, snapshots and packs as a data source |
 | `js/sbs.js` | the side-by-side viewer (two editors, connectors in the gutter) |
+| `js/steps.js` | Next and Previous Difference: where a step goes on from, the caret, centring (the side-by-side and unified views share it) |
 | `js/editor.js` | Monaco and Shiki loading, themes, languages (and their comment syntax) |
 | `js/keymap.js` | the editors' keymaps: JetBrains (ported from an MIT-licensed VS Code extension, see its header) and VS Code |
 | `js/goto.js`, `js/declarations.js` | Go to Declaration: ⌘/Ctrl-hover and click, Choose Declaration; the per-language declaration patterns |

@@ -13,7 +13,7 @@ import {fileIcon, icons, isImagePath} from './icons.js'
 import {formatWhen, LogView} from './log.js'
 import {onDoubleShift, Palette} from './palette.js'
 import {installTooltips, pointTip} from './tooltip.js'
-import {caretLine, caretPoint, centredTop, changeFrom, hasLines, normalizeChanges, StepOrigin} from './steps.js'
+import {caretLine, caretPoint, centredTop, changeFrom, normalizeChanges, StepOrigin} from './steps.js'
 import {onAppUpdate} from './update.js'
 import {appOffline, clearOffline, downloadRepo, hasSavedData, importPack, offlineRepos, removeRepo, storageUse} from './offline.js'
 import {highlightBlocks, renderMarkdown, repoResolvers, richSource, sanitize} from './markdown.js'
@@ -3066,7 +3066,7 @@ function uniGoTo(i, focus = false) {
     const c = normalizeChanges(state.unified.getLineChanges())[i]
     if (!c) return
     const user = uniUserSide()
-    const side = state.uniSide = uniInline() || hasLines(c, user) ? user : hasLines(c, 'L') ? 'L' : 'R'
+    const side = state.uniSide = user
     const ed = uniEditor(side)
     state.uniCur = i
     // the aligned view scrolls its other editor along

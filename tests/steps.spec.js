@@ -85,3 +85,19 @@ test('past the last change of the last file, a step says there are no more', asy
     await expect(tip(page)).toHaveText('No more differences')
     expect(fileParam(page)).toBe('b.ts')
 })
+
+test.describe('while editing', () => {
+    test.use({token: true})
+    test('a step onto a removed block keeps the caret in the editable side, where the block was', async ({page}) => {
+        const old = lines(200)
+        const pr = fakePr(page.github, ++number, [{filename: 'c.ts', old, new: old.split('\n').filter((l, i) => i < 59 || i > 61).join('\n')}])
+        await page.goto(`${pr.url}&file=c.ts`)
+        await ready(page)
+        await page.locator('#btn-edit').click()
+        await page.locator('.sbs-right .view-line').first().click()
+        await page.keyboard.press('Control+Home')
+        await page.keyboard.press('F7')
+        await expect(page.locator('.sbs-right textarea')).toBeFocused()
+        expect(await page.evaluate(() => window.monaco.editor.getEditors().find((e) => e.hasTextFocus()).getPosition())).toEqual({lineNumber: 60, column: 1})
+    })
+})
