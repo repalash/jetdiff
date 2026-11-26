@@ -2,7 +2,7 @@
 // against (tools/serve.mjs) sends the same.
 
 // index.html's import map, the app's one inline script (npm run vendor writes this when the libraries change)
-export const IMPORT_MAP_HASH = 'sha256-pY1Bmoa1DPnsql95VtzUKhSdzuMcapSX37s9SBcOgTw='
+export const IMPORT_MAP_HASH = 'sha256-qh5FPXDclmQA6hPa1q6aigM0g+0UVudlaPBzw/QqK4E='
 
 // Only what the app needs. Everything it runs comes from the site (the libraries too, in vendor/). Monaco sets inline
 // styles. Images: the site, the diff's own blob: and data: images, and any https image, as Markdown previews show remote

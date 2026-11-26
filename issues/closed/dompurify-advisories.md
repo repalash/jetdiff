@@ -6,3 +6,5 @@ fixes of the advisories `npm audit` lists (up to 3.4.16; 3.5.0 has them all). Mo
 mutation XSS in the default mode. The Content Security Policy now blocks inline scripts and event handlers, which
 limits what a bypass can do. Upgrade (`npm install --save-exact dompurify@<version>`, then `npm run vendor`) and run the
 tests, in particular `tests/security.spec.js`.
+
+Done: DOMPurify 3.4.17, which fixes every listed advisory (3.5.0, released days before, was left for a later bump).
