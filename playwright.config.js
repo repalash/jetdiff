@@ -3,7 +3,7 @@ import {defineConfig, devices} from '@playwright/test'
 // service worker requests go through the tests' routes too (tests/offline.spec.js)
 process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = '1'
 
-const port = 4173
+const port = +(process.env.TEST_PORT || 4173)
 
 export default defineConfig({
     testDir: 'tests',
