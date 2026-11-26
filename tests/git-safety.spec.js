@@ -32,6 +32,9 @@ function branch(github) {
     return b
 }
 
+/** The blob of a file at the head of the recorded pull request: the version a Viewed mark is for. */
+const blob = (path) => recorded(`${R}/pulls/193/files?per_page=100&page=1`).find((f) => f.filename === path).sha
+
 const posts = (github) => github.writes.filter((w) => w.method === 'POST' && w.path !== '/graphql')
 
 async function edit(page, text = ' // edited') {
@@ -325,16 +328,37 @@ test('Viewed marks queued offline stay queued until GitHub has them', async ({pa
         return fail ? {errors: [{message: 'Something went wrong'}]} : {data: {markFileAsViewed: {clientMutationId: null}}}
     })
     const key = 'jd.viewed.repalash/threepipe/#193.pending'
-    await seedOnce(page, seed(key, {[FILE]: true, [FILE2]: true}))
+    await seedOnce(page, seed(key, {[FILE]: blob(FILE), [FILE2]: blob(FILE2)}))
     const queued = () => page.evaluate((k) => JSON.parse(localStorage.getItem(k)), key)
     await page.goto(`./?pr=${PR}&file=${FILE}`)
     await ready(page)
     // the first is viewed on GitHub already; the second's mark fails
     await expect.poll(() => marked).toEqual([FILE2])
-    await expect.poll(queued).toEqual({[FILE2]: true})
+    await expect.poll(queued).toEqual({[FILE2]: blob(FILE2)})
     fail = false
     await page.reload()
     await ready(page)
     await expect.poll(queued).toEqual({})
     expect(marked).toEqual([FILE2, FILE2])
+})
+
+test('a Viewed mark queued offline for a file that changed since is dropped, not sent', async ({page}) => {
+    const {github} = page
+    branch(github)
+    const marked = []
+    github.handle(({path, body}) => {
+        if (path !== '/graphql') return
+        if (body.query.includes('viewerViewedState')) return {data: {repository: {pullRequest: {id: 'PR_1', files: {pageInfo: {hasNextPage: false},
+            nodes: [{path: FILE, viewerViewedState: 'DISMISSED'}, {path: FILE2, viewerViewedState: 'UNVIEWED'}]}}}}}
+        marked.push(body.variables.p)
+        return {data: {markFileAsViewed: {clientMutationId: null}}}
+    })
+    const key = 'jd.viewed.repalash/threepipe/#193.pending'
+    // FILE was marked on an older version of it; FILE2 on the one shown
+    await seedOnce(page, seed(key, {[FILE]: 'f'.repeat(40), [FILE2]: blob(FILE2)}))
+    await page.goto(`./?pr=${PR}&file=${FILE}`)
+    await ready(page)
+    await expect.poll(() => marked).toEqual([FILE2])
+    await expect.poll(() => page.evaluate((k) => JSON.parse(localStorage.getItem(k)), key)).toEqual({})
+    await expect(page.locator('#chk-viewed')).not.toBeChecked()
 })

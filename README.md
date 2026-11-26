@@ -17,7 +17,11 @@ gets a message saying so.
 - **Side-by-side diff** of whole files, with connectors between matching changes, synced scrolling, word-level
   highlighting and line numbers of both sides in the gutter. A unified view is one click away (and the default on a
   phone).
-- **Changed-files tree** grouped by directory, with Viewed checkboxes that sync with GitHub's own when signed in.
+- **Labels** for what a diff cannot show: a change of whitespace only, of the line endings (CRLF → LF) or of the
+  byte-order mark, and Markdown changes the preview does not show (link targets, image sources, HTML attributes,
+  reference definitions); files with edits made here and not pushed are labelled too.
+- **Changed-files tree** grouped by directory, with Viewed checkboxes that sync with GitHub's own when signed in. As on
+  GitHub, a file marked Viewed that changes afterwards (a new push) is not viewed any more.
 - **Commits**: a log with a graph line; select a commit or a range to see only its changes.
 - **Timeline**: the description, comments and reviews with their inline threads, rendered as Markdown, with the
   reactions to the description and the comments (counts only: GitHub's summary does not say who reacted).
@@ -136,7 +140,7 @@ commit options; not the settings) and, separately, the edits not pushed yet.
 The pencil over the diff makes the right side (the pull request's head) editable; Commit and Push commits the edits
 to the pull request's branch, with Amend and Undo. Amend keeps the amended commit's author and date, as `git commit
 --amend` does; its committer is the one set in Commit Options, else the author set there, else the token's account.
-Edits are kept on the device until committed. A file that is not valid UTF-8, or has both CRLF and LF line endings,
+Edits are kept on the device until committed; an edited file has a dot in the tree and "edited here" over its diff. A file that is not valid UTF-8, or has both CRLF and LF line endings,
 opens read-only (its label says why), as an edit would change the rest of the file too. When the pull request gets
 new commits that change an edited file, the edit is kept aside, not applied: the Commit panel lists it to copy,
 download or discard.

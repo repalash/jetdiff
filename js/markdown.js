@@ -101,6 +101,46 @@ export async function renderMarkdown(text, {classify, link, image, marks = false
     return purify.sanitize(tpl.innerHTML, PURIFY_OPTIONS)
 }
 
+/**
+ * How many of `lineChanges` the rendered Markdown does not show: the blocks around such a change look the same on both
+ * sides once their attributes are left out (link targets, image sources, HTML attributes), or the change renders nothing
+ * (reference definitions, comments) or renders the same (`*a*` for `_a_`, a paragraph wrapped anew).
+ */
+export async function hiddenChanges(oldText, newText, lineChanges) {
+    const {md, purify} = await loadMarkdown()
+    // the top-level blocks: their source lines [a, b), 0-based, and what they look like
+    const blocks = (text) => {
+        const env = {}
+        const tokens = md.parse(text, env)
+        const out = []
+        for (let i = 0; i < tokens.length; i++) {
+            const t = tokens[i]
+            if (t.level !== 0 || !t.map) continue
+            let j = i
+            if (t.nesting === 1) while (tokens[j].level !== 0 || tokens[j].nesting !== -1) j++
+            out.push({a: t.map[0], b: t.map[1], tokens: tokens.slice(i, j + 1), env})
+            i = j
+        }
+        return out
+    }
+    const looks = (block) => {
+        if (block.looks !== undefined) return block.looks
+        const tpl = template(purify.sanitize(md.renderer.render(block.tokens, md.options, block.env), PURIFY_OPTIONS))
+        for (const el of tpl.content.querySelectorAll('*')) for (const a of [...el.attributes]) el.removeAttribute(a.name)
+        const walker = document.createTreeWalker(tpl.content, NodeFilter.SHOW_TEXT)
+        while (walker.nextNode()) if (!walker.currentNode.parentElement?.closest('pre')) walker.currentNode.nodeValue = walker.currentNode.nodeValue.replace(/\s+/g, ' ')
+        return (block.looks = tpl.innerHTML.trim())
+    }
+    const sides = [blocks(oldText), blocks(newText)]
+    // with the unchanged line before and after on each side: an added line can join or split the blocks around it
+    const around = (B, start, end) => B.filter((b) => b.a + 1 <= end + 1 && b.b >= start - 1).map(looks).join('')
+    return lineChanges.filter((c) => {
+        const o = c.originalEndLineNumber > 0 ? [c.originalStartLineNumber, c.originalEndLineNumber] : [c.originalStartLineNumber + 1, c.originalStartLineNumber]
+        const n = c.modifiedEndLineNumber > 0 ? [c.modifiedStartLineNumber, c.modifiedEndLineNumber] : [c.modifiedStartLineNumber + 1, c.modifiedStartLineNumber]
+        return around(sides[0], ...o) === around(sides[1], ...n)
+    }).length
+}
+
 export async function highlightBlocks(el) {
     for (const code of el.querySelectorAll('pre > code[class*="language-"]')) {
         const lang = [...code.classList].find((c) => c.startsWith('language-'))?.slice(9)

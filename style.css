@@ -190,7 +190,12 @@ body.side-hidden .side, body.side-hidden .splitter { display: none; }
 .sbs-head .ic, .uni-head .ic { width: 13px; height: 13px; }
 .tag { font-size: 10.5px; padding: 0 6px; border-radius: 8px; }
 .tag-add { background: #2a3d22; color: var(--added); }
-.tag-ro { background: var(--accent-bg); color: var(--accent); white-space: nowrap; }
+.tag-ro, .tag-ed { background: var(--accent-bg); color: var(--accent); white-space: nowrap; }
+/* what the change is made of: whitespace, line endings, a byte-order mark, changes the Markdown preview cannot show */
+.tag-note { background: var(--bg-on); color: var(--fg); white-space: nowrap; }
+.head-tags { display: contents; }
+button.tag { border: 0; font: inherit; font-size: 10.5px; line-height: inherit; cursor: pointer; }
+button.tag-note:hover { color: var(--fg-strong); }
 .sbs-body { display: flex; flex: 1; min-height: 0; border-top: 1px solid var(--border); }
 .sbs-ed { flex: 1; min-width: 0; position: relative; }
 /* a whole-pixel width: Monaco lays out in whole pixels, and a fractional editor edge leaves a hairline gap in the bands */
@@ -201,6 +206,10 @@ body.side-hidden .side, body.side-hidden .splitter { display: none; }
 .uni-head.aligned { display: grid; grid-template-columns: 1fr 1fr; height: 24px; padding: 0 6px; }
 .uni-head .dim { margin-left: 8px; }
 .sbs-head .dim { margin-left: 4px; }
+/* the tags go before the rest of the header gives way */
+.sbs-head .dim, .uni-head .dim, .mdp-head .dim { overflow: hidden; text-overflow: ellipsis; min-width: 2em; }
+.sbs-head .tag, .uni-head .tag, .mdp-head .tag { flex-shrink: 0; }
+@media (max-width: 760px) { .uni-head > span { flex-wrap: wrap; height: auto; min-height: 20px; row-gap: 2px; } }
 .uni-ed { flex: 1; min-height: 0; border-top: 1px solid var(--border); }
 /* a file outside the changes, shown on its own (Go to Declaration) */
 .file-head { grid-template-columns: 1fr; }

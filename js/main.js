@@ -16,7 +16,7 @@ import {installTooltips, pointTip} from './tooltip.js'
 import {caretLine, caretPoint, centredTop, changeFrom, normalizeChanges, StepOrigin} from './steps.js'
 import {onAppUpdate} from './update.js'
 import {appOffline, clearOffline, downloadRepo, hasSavedData, importPack, offlineRepos, removeRepo, storageUse} from './offline.js'
-import {highlightBlocks, renderMarkdown, repoResolvers, richSource, sanitize} from './markdown.js'
+import {hiddenChanges, highlightBlocks, renderMarkdown, repoResolvers, richSource, sanitize} from './markdown.js'
 import {BACK, DECLARATION, DEFAULT_KEYMAP, FORWARD, keyLabel, KEYMAPS, MAC, registerAppCommands, setKeymap, shortcut} from './keymap.js'
 import {attachGoTo, chooseDeclaration, choosing, nameAt} from './goto.js'
 import {familyOf, findDeclarations} from './declarations.js'
@@ -1203,13 +1203,32 @@ function openCommitSpec(spec, file) {
     navigate(next, file)
 }
 
+// {path: version}: a mark holds the version of the file it was made on, so a file that changes after it (a new push)
+// is not viewed any more, as on GitHub
 const viewedKey = () => `viewed.${repoName(state.target)}/${state.target.type === 'pr' ? '#' + state.target.number : state.cs.headSha}`
-/** Viewed marks made offline, sent to GitHub on the next load. */
+/** Viewed marks made offline, sent to GitHub on the next load: {path: version when marked, false when unmarked}. */
 const pendingKey = () => viewedKey() + '.pending'
+/** The version of a file shown: its blob at the head (a two-dot compare lists none: its head then). */
+const fileVersion = (f) => f.blobSha || state.cs.headSha
+const fileAt = (path) => state.cs.files.find((f) => f.path === path)
+
+/** The stored marks; a value of another shape is none. */
+function viewedMarks() {
+    const m = store.get(viewedKey(), null)
+    return m?.constructor === Object ? m : {}
+}
+
+/** Stores the marks of `files` as `state.viewed` has them; the other files' marks stay. */
+function storeViewed(files) {
+    const marks = viewedMarks()
+    for (const f of files) state.viewed.has(f.path) ? marks[f.path] = fileVersion(f) : delete marks[f.path]
+    store.set(viewedKey(), marks)
+}
 
 async function loadViewed() {
     state.viewedRemote = null
-    state.viewed = new Set(store.get(viewedKey(), []))
+    const marks = viewedMarks()
+    state.viewed = new Set(state.cs.files.filter((f) => marks[f.path] === fileVersion(f)).map((f) => f.path))
     renderViewed()
     const t = state.target
     if (t.type !== 'pr' || !getToken()) return
@@ -1220,11 +1239,13 @@ async function loadViewed() {
         state.viewedRemote = {id: prId}
         state.viewed = new Set([...states].filter(([, s]) => s === 'VIEWED').map(([p]) => p))
         const key = pendingKey()
-        // a mark leaves the queue once GitHub has it; one that fails is sent again on the next load
+        // a mark leaves the queue once GitHub has it, or once its file changed (GitHub has reset its state then); one
+        // that fails is sent again on the next load
         for (const [path, v] of Object.entries(store.get(key, {}))) {
-            if (!states.has(path) || (states.get(path) === 'VIEWED') === v) { dropPending(key, path, v); continue }
+            const f = fullPr(state.cs) && fileAt(path)
+            if (!states.has(path) || (states.get(path) === 'VIEWED') === !!v || (v && f && v !== fileVersion(f))) { dropPending(key, path, v); continue }
             v ? state.viewed.add(path) : state.viewed.delete(path)
-            setFileViewed(prId, path, v).then(() => dropPending(key, path, v), () => {})
+            setFileViewed(prId, path, !!v).then(() => dropPending(key, path, v), () => {})
         }
         renderViewed()
     } catch (e) {
@@ -1254,16 +1275,18 @@ async function toggleViewed(file, viewed) {
     if (!file) return
     viewed ? state.viewed.add(file.path) : state.viewed.delete(file.path)
     renderViewed()
-    const pend = () => store.set(pendingKey(), {...store.get(pendingKey(), {}), [file.path]: viewed})
+    const mark = viewed && fileVersion(file)
+    const pend = () => store.set(pendingKey(), {...store.get(pendingKey(), {}), [file.path]: mark})
     if (state.viewedRemote) {
         try {
             await setFileViewed(state.viewedRemote.id, file.path, viewed)
             // a mark still queued for this file would undo this one on the next load
-            dropPending(pendingKey(), file.path, !viewed)
+            const queued = store.get(pendingKey(), {})[file.path]
+            if (queued !== undefined && !!queued !== viewed) dropPending(pendingKey(), file.path, queued)
         } catch (e) {
             if (e instanceof TypeError || e?.status === 503 || !navigator.onLine) {
                 pend()
-                store.set(viewedKey(), [...state.viewed])
+                storeViewed(state.cs.files)
                 return
             }
             toast(`GitHub did not save Viewed: ${e.message}`, 'error')
@@ -1271,7 +1294,7 @@ async function toggleViewed(file, viewed) {
             renderViewed()
         }
     } else {
-        store.set(viewedKey(), [...state.viewed])
+        storeViewed([file])
         if (getToken() && state.target?.type === 'pr') pend()
     }
 }
@@ -1305,6 +1328,49 @@ async function fileChanges(f, original, modified, stale) {
         return [{originalStartLineNumber: 1, originalEndLineNumber: original.getLineCount(), modifiedStartLineNumber: 0, modifiedEndLineNumber: 0}]
     }
     return computeDiff(original, modified, stale)
+}
+
+/** A text's line endings: 'LF', 'CRLF', 'CR' or 'mixed'; null with no line break. */
+function lineEndings(text) {
+    const kinds = [/\r\n/.test(text) && 'CRLF', /(^|[^\r])\n/.test(text) && 'LF', /\r(?!\n)/.test(text) && 'CR'].filter(Boolean)
+    return kinds.length > 1 ? 'mixed' : kinds[0] || null
+}
+
+/**
+ * What a file's change is made of that its diff does not show: Monaco evens out line endings and keeps a byte-order
+ * mark aside, so `eol` ([old, new]) and `bom` ('added' | 'removed') changes would show no difference. `whitespace`:
+ * every changed line differs in whitespace only (the "Ignore whitespaces" setting would show no difference either).
+ */
+function hiddenChange(oldText, newText) {
+    const hasBom = (t) => t.startsWith('\uFEFF')
+    const eol = [lineEndings(oldText), lineEndings(newText)]
+    const lines = (t) => t.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/)
+    const a = lines(oldText), b = lines(newText)
+    const bare = (l) => l.replace(/\s+/g, '')
+    return {
+        bom: hasBom(oldText) === hasBom(newText) ? null : hasBom(newText) ? 'added' : 'removed',
+        eol: eol[0] && eol[1] && eol[0] !== eol[1] ? eol : null,
+        whitespace: a.length === b.length && a.some((l, i) => l !== b[i]) && a.every((l, i) => bare(l) === bare(b[i])),
+    }
+}
+
+/** The tags of the open file's head that can change while it shows: its edit, and what the change is made of. */
+function headTagsHtml(f) {
+    const t = state.fileText
+    if (!f || t?.path !== f.path) return ''
+    const edited = state.edits.has(f.path)
+    let html = edited ? '<span class="tag tag-ed" title="Edited here and not committed yet">edited here</span>' : ''
+    if (f.status === 'added' || f.status === 'removed') return html
+    const c = hiddenChange(t.old, edited ? state.edits.get(f.path) : t.new)
+    if (c.whitespace) html += '<span class="tag tag-note" title="Only spaces, tabs or indentation changed">whitespace only</span>'
+    if (c.eol) html += `<span class="tag tag-note" title="The line separators changed: the diff does not show them">line endings changed: ${c.eol.join(' → ')}</span>`
+    if (c.bom) html += `<span class="tag tag-note" title="The byte-order mark (U+FEFF) at the start of the file: the diff does not show it">byte-order mark ${c.bom}</span>`
+    return html
+}
+
+function renderHeadTags() {
+    const html = headTagsHtml(currentFile())
+    for (const el of document.querySelectorAll('#viewer .head-tags')) el.innerHTML = html
 }
 
 /**
@@ -1354,6 +1420,7 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
     if (id !== state.fileLoadId) return
 
     const added = f.status === 'added'
+    state.fileText = orig.binary || mod.binary ? null : {path: f.path, old: orig.text, new: mod.text}
     const labels = {
         left: `${icons.lock}<span class="sha">${added ? '∅' : short(cs.baseSha) || '∅'}</span><span class="path">${esc(origPath)}</span>`,
         right: (added ? icons.lock : '')
@@ -1361,7 +1428,8 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
             + (fullPr(cs) ? '<span class="dim">Head of the pull request</span>' : '')
             + (f.prevPath ? `<span class="path">${esc(f.path)}</span>` : '')
             + (added ? '<span class="tag tag-add">new file</span>' : '')
-            + (mod.readOnly && canEdit(f) ? `<span class="tag tag-ro" title="An edit would change the rest of the file too">read-only: ${esc(mod.readOnly)}</span>` : ''),
+            + (mod.readOnly && canEdit(f) ? `<span class="tag tag-ro" title="An edit would change the rest of the file too">read-only: ${esc(mod.readOnly)}</span>` : '')
+            + `<span class="head-tags">${headTagsHtml(f)}</span>`,
     }
 
     if (orig.binary || mod.binary) {
@@ -1491,9 +1559,9 @@ async function showMarkdownPreview(f, oldText, newText, lineChanges, labels, id,
     const both = f.status !== 'added' && f.status !== 'removed'
     const unified = sides.length === 1 && both
     const scroll = keepScroll ? $('#view-md .mdp-pane:last-child .mdp-body')?.scrollTop : 0
-    let html
+    let html, hidden
     try {
-        html = await Promise.all(sides.map((s) => {
+        ;[hidden, ...html] = await Promise.all([both ? hiddenChanges(oldText, newText, lineChanges) : 0, ...sides.map((s) => {
             const old = s === 'old'
             const whole = old ? f.status === 'removed' : f.status === 'added'
             const src = whole ? {text: old ? oldText : newText, map: null} : richSource(oldText, newText, lineChanges, s, unified)
@@ -1503,7 +1571,7 @@ async function showMarkdownPreview(f, oldText, newText, lineChanges, labels, id,
                 classify: whole ? null : old ? classify(L.modOld, L.del, 'md-del', src.map) : classify(L.mod, L.ins, 'md-ins', src.map),
                 ...(old ? repoResolvers(t.owner, t.repo, cs.baseSha, f.prevPath || f.path) : repoResolvers(t.owner, t.repo, cs.headSha, f.path)),
             })
-        }))
+        })])
     } catch (e) {
         console.error(e)
         toast(`The Markdown preview could not load (${e.message}); showing the code`, 'error')
@@ -1517,10 +1585,14 @@ async function showMarkdownPreview(f, oldText, newText, lineChanges, labels, id,
         : '<span class="mdp-legend" title="Blocks: a bar and tint on the left. Words: highlighted inside the text.">'
             + '<i class="lg-ins"></i>added <i class="lg-mod"></i>changed <i class="lg-del"></i>removed'
             + (sides.length > 1 ? '' : ' (struck through)') + '</span>'
+    const total = lineChanges.length
+    const notShown = !hidden ? '' : `<button class="tag tag-note md-hidden" title="Link targets, image sources, HTML attributes, reference definitions and changes that render the same do not show in the preview: Code shows them">${
+        hidden < total ? `${hidden} of ${total} changes` : total > 1 ? 'changes' : 'change'} not shown: see Code</button>`
     view.innerHTML = `<div class="mdp${sides.length > 1 ? ' two' : ''}">${sides.map((s, i) => `
-        ${i ? '<canvas class="mdp-div"></canvas>' : ''}<div class="mdp-pane mdp-${s}"><div class="mdp-head">${s === 'old' ? labels.left : labels.right}${i === sides.length - 1 ? legend : ''}</div>
+        ${i ? '<canvas class="mdp-div"></canvas>' : ''}<div class="mdp-pane mdp-${s}"><div class="mdp-head">${s === 'old' ? labels.left : labels.right}${i === sides.length - 1 ? notShown + legend : ''}</div>
             <div class="mdp-body"><article class="md">${html[i]}</article></div></div>`).join('')}</div>`
     showView('md')
+    $('.md-hidden', view)?.addEventListener('click', () => settings.mdPreview && toggleMdPreview())
     const main = $('.mdp-pane:last-child .mdp-body', view)
     state.mdMarks = mdStops(main, lineChanges, f)
     state.mdCur = -1
@@ -2125,6 +2197,7 @@ function renderEdits() {
     $('#strip-badge').hidden = !n
     $('#strip-badge').textContent = n
     state.tree?.setEdited(state.edits.keys())
+    renderHeadTags()
     if (state.sidePanel === 'commit') renderCommitPanel()
     saveEdits()
 }
