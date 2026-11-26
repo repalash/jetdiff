@@ -167,6 +167,8 @@ let SNAP = (() => {
     if (s !== null) window.name = s ? SNAP_NAME + s : ''
     return s || (window.name.startsWith(SNAP_NAME) ? window.name.slice(SNAP_NAME.length) : '')
 })()
+// what storage or window.name holds is checked as a link's value is: anything but an https URL is no snapshot
+if (!httpsUrl(SNAP)) SNAP = ''
 
 /** The other site's snapshot URL a link asked to open, until the user answered (`answerSnapshot`); else ''. */
 export const snapshotToAsk = () => askSnap

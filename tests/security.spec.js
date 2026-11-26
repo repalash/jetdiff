@@ -105,3 +105,10 @@ test('a Markdown file cannot smuggle a javascript: link, a form or a style throu
     await page.locator('.mdp-new a', {hasText: 'x'}).last().click({force: true}).catch(() => {})
     expect(await pwned(page)).toBe(false)
 })
+
+test('a saved snapshot that is not an https URL is no snapshot', async ({page}) => {
+    await page.addInitScript(() => localStorage.setItem('jd.snap', 'flight'))
+    await page.goto(`./?pr=${PR}`)
+    await ready(page)
+    await expect(page.locator('.rec-bar')).toHaveCount(0)
+})
