@@ -2,6 +2,8 @@ name: ci
 on:
   push:
   pull_request:
+  # started by vendor.yml on a Dependabot branch it committed to
+  workflow_dispatch:
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,6 +14,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # index.html and worker/headers.js name the installed libraries (on a Dependabot branch, vendor.yml commits that)
+      - run: npm run vendor -- --check
       - run: npx playwright install --with-deps chromium
       - run: npm test
 

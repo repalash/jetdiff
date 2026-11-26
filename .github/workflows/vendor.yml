@@ -1,0 +1,34 @@
+# After Dependabot changes a library's version, index.html (the import map) and worker/headers.js (its hash) must follow:
+# this runs `npm run vendor` on its pull request and commits the result. A commit pushed with GITHUB_TOKEN starts no
+# workflow, but GITHUB_TOKEN may start one with workflow_dispatch: this then runs the tests (ci.yml) on the new head.
+name: vendor
+on: pull_request
+jobs:
+  vendor:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # vendor only reads node_modules: no install scripts run with a token that can push
+      - run: npm ci --ignore-scripts
+      - run: npm run vendor
+      - name: Commit and test
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am 'npm run vendor'
+          git push origin "HEAD:$BRANCH"
+          gh workflow run ci.yml --ref "$BRANCH"
