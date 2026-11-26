@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
-import {test, expect, ready, recorded, FIXTURE_DIR, PR, HEAD} from './fixture.js'
+import {test, expect, ready, recorded, fakePr, FIXTURE_DIR, PR, HEAD} from './fixture.js'
 
 const R = '/repos/repalash/threepipe'
 const FILE = 'plugins/cloud/src/auth/CloudAuth.ts'
@@ -100,14 +100,54 @@ test('removing a repository keeps the data of one whose name starts the same', a
     expect(await cacheKeys(page, 'jd-contents-v1')).toEqual([urls['jd-contents-v1'][1]])
 })
 
+const noGitHub = (page) => page.route('https://api.github.com/**', (route) => route.abort('internetdisconnected'))
+
 test('a file missing from an imported pack is not shown as empty', async ({page}) => {
     const index = JSON.parse(fs.readFileSync(new URL('index.json', FIXTURE_DIR)))
     const missing = index[`${R}/contents/${FILE}?ref=${HEAD}`].file
     await page.goto('./')
     await importPack(page, fixturePack([missing]))
+    await noGitHub(page)
     await page.goto(`./?pr=${PR}&file=${FILE}`)
     await ready(page)
     await expect(page.locator('#view-msg')).toContainText('Not in the imported packs')
+})
+
+test('imported packs leave the app live online, and answer for GitHub when it cannot be reached', async ({page, context}) => {
+    await context.route('**/auth/config', (r) => r.fulfill({json: {clientId: 'cid', appSlug: 'jetdiff'}}))
+    await page.goto('./')
+    await importPack(page, fixturePack())
+    await page.goto('./')
+    await expect(page.locator('#land-signin')).toBeVisible()
+    await expect(page.locator('.land-lists h3').first()).toContainText('Available offline')
+    await expect(page.locator('.land-list').first().locator('.li-label')).toHaveText('repalash/threepipe#193')
+    // online: a pull request the pack does not hold
+    const other = fakePr(page.github, 9020, [{filename: 'a.txt', old: 'a\n', new: 'b\n'}])
+    await page.goto(other.url)
+    await ready(page)
+    await expect(page.locator('#tree .tr-file')).toHaveCount(1)
+    await expect(page.locator('#rec-bar')).toHaveCount(0)
+    await noGitHub(page)
+    await page.goto(`./?pr=${PR}&file=${FILE}`)
+    await ready(page)
+    await expect(page.locator('.sbs-right .view-lines')).toBeVisible()
+    await expect(page.locator('#offline-pill')).toBeVisible()
+    await expect(page.locator('#rec-bar')).toHaveText('Recorded data from repalash-threepipe.zip')
+})
+
+test('an install that imported packs before keeps them, as an offline fallback only', async ({page}) => {
+    await page.goto('./')
+    await importPack(page, fixturePack())
+    // the setting an earlier version kept for imported packs
+    await page.evaluate(() => localStorage.setItem('jd.snap', 'pack'))
+    const other = fakePr(page.github, 9021, [{filename: 'a.txt', old: 'a\n', new: 'b\n'}])
+    await page.goto(other.url)
+    await ready(page)
+    expect(await page.evaluate(() => localStorage.getItem('jd.snap'))).toBeNull()
+    await noGitHub(page)
+    await page.goto(`./?pr=${PR}&file=${FILE}`)
+    await ready(page)
+    await expect(page.locator('.sbs-right .view-lines')).toBeVisible()
 })
 
 test('importing a pack asks to keep the storage', async ({page}) => {

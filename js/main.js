@@ -1,7 +1,7 @@
 import {
-    accountIdentity, authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
-    paramsToTarget, parseTarget, listPullRequests, packMemory, searchMyPullRequests, setFileViewed, setToken, snapshotName, snapshotRepos,
-    targetToParams,
+    accountIdentity, answerSnapshot, authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
+    otherSite, PACK_ANSWER, paramsToTarget, parseTarget, listPullRequests, searchMyPullRequests, setFileViewed, setSnapshot, setToken, snapshotInfo, snapshotName, snapshotRepos,
+    snapshotToAsk, targetToParams,
 } from './github.js'
 import {
     applyTheme, applyThemeCss, DEFAULT_THEME, ensureLanguage, fullWidthSelection, languageForPath, languageName, loadMonaco,
@@ -333,16 +333,14 @@ function showLanding(error) {
         if (!repos?.length || !$('#land-snap')) return
         const n = repos.reduce((a, r) => a + r.prs.length, 0)
         const saved = new Set(offlineRepos().map(repoName))
-        const pack = snapshotName() === 'pack'
-        const all = pack || repos.every((r) => saved.has(repoName(r)))
-        const status = all
-            ? `${icons.check} ${pack && packMemory.size ? 'Loaded in this tab: this page cannot keep data, so keep the tab open (no reload).' : 'On this device: they open with no network.'}`
+        const all = repos.every((r) => saved.has(repoName(r)))
+        const status = all ? `${icons.check} On this device: they open with no network.`
             : 'Download them once on this device (online), then they open with no network.'
         $('#land-snap').innerHTML = `
             <div class="land-snap">
-                <div><b>${n} pull requests</b> from ${repos.map((r) => esc(repoName(r))).join(' and ')}, ${pack ? 'from offline packs' : 'recorded for reading offline'}.</div>
+                <div><b>${n} pull requests</b> from ${repos.map((r) => esc(repoName(r))).join(' and ')}, recorded for reading offline.</div>
                 <div class="dim small">${status}</div>
-                ${pack ? '' : `<button class="btn ${all ? '' : 'btn-primary'}" id="land-snap-go">${icons.download} ${all ? 'Update the download' : 'Download everything for offline'}</button>`}
+                <button class="btn ${all ? '' : 'btn-primary'}" id="land-snap-go">${icons.download} ${all ? 'Update the download' : 'Download everything for offline'}</button>
             </div>
             ${repos.map((r) => `<h3>${esc(repoName(r))} <span class="dim">(${r.prs.length})</span></h3><div class="land-list">${r.prs.map((p) =>
                 landItem(prHref(r, p.number), `#${esc(p.number)}`, p.title)).join('')}</div>`).join('')}`
@@ -411,13 +409,54 @@ function reloadTarget() {
     if (state.target) route(true)
 }
 
+/** The page's URL without the parameter `name`, in place. */
+function dropParam(name) {
+    const p = new URLSearchParams(location.search)
+    p.delete(name)
+    history.replaceState(null, '', p.size ? '?' + p : location.pathname)
+}
+
+/** Asks before showing another site's recorded data; `open` runs on Open, `cancel` on Cancel or Escape. */
+function askRecorded(host, open, cancel) {
+    let answered = false
+    const dlg = openDialog(`
+        <form class="dlg" method="dialog">
+            <h2>Open recorded pull requests from ${esc(host)}?</h2>
+            <p class="dim">This data comes from that site, not from GitHub.</p>
+            <div class="dlg-actions"><span class="spacer"></span>
+                <button type="button" id="rec-cancel" class="btn btn-ghost">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="rec-open">Open</button></div>
+        </form>`, {focus: '#rec-cancel', cancel: '#rec-cancel'})
+    $('form', dlg).onsubmit = (e) => {
+        e.preventDefault()
+        answered = true
+        dlg.close()
+        open()
+    }
+    dlg.addEventListener('close', () => { if (!answered) { answered = true; cancel() } }, {once: true})
+}
+
 async function route(force = false) {
     const params = new URLSearchParams(location.search)
-    if (params.get('packs') && !state.packsLoading) return loadPacksFrom(params.get('packs'))
+    const ask = snapshotToAsk()
+    if (ask) {
+        return askRecorded(new URL(ask).host, () => { answerSnapshot(true); renderRecordedBar(); route(true) },
+            () => { answerSnapshot(false); dropParam('snap'); route(true) })
+    }
+    renderRecordedBar()
+    const packs = params.get('packs')
+    if (packs && !state.packsLoading) {
+        const base = new URL(packs, location.href)
+        // a link imported before opens with no question (and no download)
+        if (!otherSite(base.href) || store.raw('packsFrom') === packsBase(packs)) return loadPacksFrom(packs)
+        return askRecorded(base.host, () => loadPacksFrom(packs), () => { dropParam('packs'); route(true) })
+    }
     const target = paramsToTarget(params)
     if (!target) {
         state.cs = null
         state.key = null
+        state.packAnswered = false
+        renderRecordedBar()
         return showLanding()
     }
     const file = params.get('file')
@@ -435,7 +474,9 @@ async function openTarget(target, file) {
     state.target = target
     state.ready = false
     state.offlineCopy = false
+    state.packAnswered = false
     renderOffline()
+    renderRecordedBar()
     renderCommitPanel(false)
     $('#landing').hidden = true
     $('#app').hidden = false
@@ -1580,6 +1621,48 @@ async function timelineHtml(cs, {comments, reviews, inline}, desc) {
 
 // a saved copy answered for the view shown (each load starts afresh)
 window.addEventListener('jd-offline', () => { state.offlineCopy = true; renderOffline() })
+window.addEventListener(PACK_ANSWER, () => { if (!state.packAnswered) { state.packAnswered = true; renderRecordedBar() } })
+
+const dateOf = (d) => new Date(d).toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'})
+
+/**
+ * The bar over the page while recorded data shows: a snapshot (with Exit, back to live GitHub), or an imported pack
+ * answering while GitHub cannot be reached.
+ */
+function renderRecordedBar() {
+    const snap = snapshotName()
+    const t = state.target
+    const pack = !snap && state.packAnswered
+        && (offlineRepos().find((r) => r.pack && t && r.owner === t.owner && r.repo === t.repo)?.from || 'an offline pack')
+    let bar = $('#rec-bar')
+    document.body.classList.toggle('has-rec-bar', !!(snap || pack))
+    if (!snap && !pack) return bar?.remove()
+    if (!bar) {
+        bar = document.createElement('div')
+        bar.id = 'rec-bar'
+        bar.className = 'rec-bar'
+        document.body.prepend(bar)
+    }
+    const from = snap ? /^https:\/\//.test(snap) ? new URL(snap).host : location.host : pack
+    const key = `${snap}|${from}`
+    if (bar.dataset.key === key) return
+    bar.dataset.key = key
+    bar.innerHTML = `${icons.download}<span class="rec-text">Recorded data from <b>${esc(from)}</b><span class="rec-date"></span></span>
+        ${snap ? '<button class="rec-exit" id="rec-exit" title="Leave the recorded data: show live GitHub">Exit</button>' : ''}`
+    if (snap) {
+        $('#rec-exit', bar).onclick = exitSnapshot
+        snapshotInfo().then((info) => {
+            if (info?.date && bar.dataset.key === key) $('.rec-date', bar).textContent = ` · ${dateOf(info.date)}`
+        })
+    }
+}
+
+function exitSnapshot() {
+    setSnapshot('')
+    dropParam('snap')
+    renderRecordedBar()
+    route(true)
+}
 window.addEventListener('online', () => renderOffline())
 window.addEventListener('offline', () => renderOffline())
 function renderOffline() {
@@ -1715,11 +1798,13 @@ function pickPack() {
     input.click()
 }
 
+const packsBase = (folder) => folder.endsWith('/') ? folder : folder + '/'
+
 /** Downloads and imports the offline packs listed in <folder>/packs.json. */
 async function loadPacksFrom(folder) {
-    const base = folder.endsWith('/') ? folder : folder + '/'
+    const base = packsBase(folder)
     // already imported on this device (the link opened again offline): no download
-    if (store.raw('packsFrom') === base && snapshotName() === 'pack') {
+    if (store.raw('packsFrom') === base && offlineRepos().some((r) => r.pack)) {
         history.replaceState(null, '', location.pathname)
         return route()
     }
@@ -1749,7 +1834,7 @@ async function loadPacksFrom(folder) {
         }
         t.remove()
         // a sandboxed page keeps the packs in memory only: then the link has to download them again
-        if (await loadPacks(blobs)) {
+        if (await loadPacks(blobs, new URL(base, location.href).host)) {
             store.setRaw('packsFrom', base)
             history.replaceState(null, '', location.pathname)
         }
@@ -1761,8 +1846,8 @@ async function loadPacksFrom(folder) {
     }
 }
 
-/** Imports offline packs; true when they are kept on this device. */
-async function loadPacks(files) {
+/** Imports offline packs (`from`: the host they came from, else each file's name); true when they are kept on this device. */
+async function loadPacks(files, from = '') {
     files = files.filter((f) => /\.zip$/i.test(f.name || '') || (f.type || '').includes('zip'))
     if (!files.length) return false
     const t = toastEl('toast')
@@ -1770,7 +1855,7 @@ async function loadPacks(files) {
         let persisted = true
         const prsOf = new Map()
         for (const f of files) {
-            const r = await importPack(f, (step, i, n) => { t.textContent = `${f.name}: ${step}${n > 1 ? ` ${i} / ${n}` : '…'}` })
+            const r = await importPack(f, (step, i, n) => { t.textContent = `${f.name}: ${step}${n > 1 ? ` ${i} / ${n}` : '…'}` }, {from: from || f.name || ''})
             for (const x of r.repos) prsOf.set(x.repo, x.prs.length)
             persisted &&= r.persisted
         }

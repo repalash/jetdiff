@@ -26,6 +26,52 @@ test('a snapshot with markup in its data cannot run script or link outside GitHu
     expect(await page.locator('#btn-github').getAttribute('href')).toMatch(/^https:\/\/github\.com\//)
 })
 
+const fixtureFile = (url, prefix) => fs.readFileSync(new URL(new URL(url).pathname.split(prefix)[1], FIXTURE_DIR))
+const snapSetting = (page) => page.evaluate(() => localStorage.getItem('jd.snap'))
+
+test('recorded data from another site opens only after a yes, under a bar with Exit back to GitHub', async ({page, context}) => {
+    let asked = 0
+    await context.route('https://other.example/snap/**', (route) => {
+        asked++
+        route.fulfill({headers: {'access-control-allow-origin': '*', 'last-modified': 'Wed, 25 Nov 2026 10:00:00 GMT'}, body: fixtureFile(route.request().url(), '/snap/')})
+    })
+    const link = `./?snap=${encodeURIComponent('https://other.example/snap/')}&pr=${PR}`
+    await page.goto(link)
+    await expect(page.locator('#dialog h2')).toHaveText('Open recorded pull requests from other.example?')
+    await page.locator('#rec-cancel').click()
+    await ready(page)
+    expect(asked).toBe(0)
+    expect(await snapSetting(page)).toBeNull()
+    await expect(page.locator('#rec-bar')).toHaveCount(0)
+
+    await page.goto(link)
+    await page.locator('#rec-open').click()
+    await ready(page)
+    expect(asked).toBeGreaterThan(0)
+    expect(await snapSetting(page)).toBe('https://other.example/snap/')
+    await expect(page.locator('#rec-bar')).toContainText('Recorded data from other.example · Nov 25, 2026')
+    await page.locator('#rec-exit').click()
+    await ready(page)
+    await expect(page.locator('#rec-bar')).toHaveCount(0)
+    expect(await snapSetting(page)).toBeNull()
+})
+
+test('a snapshot of this site shows the bar with no question; a packs link from another site asks first', async ({page, context}) => {
+    await context.route('**/snap/fixture/**', (route) => route.fulfill({body: fixtureFile(route.request().url(), '/snap/fixture/')}))
+    let asked = 0
+    await context.route('https://other.example/**', (route) => (asked++, route.abort()))
+    await page.goto(`./?snap=fixture&pr=${PR}`)
+    await ready(page)
+    await expect(page.locator('#dialog')).toBeHidden()
+    await expect(page.locator('#rec-bar')).toContainText(`Recorded data from ${new URL(page.url()).host}`)
+    await page.goto('./?snap=&packs=https://other.example/packs/')
+    await expect(page.locator('#dialog h2')).toHaveText('Open recorded pull requests from other.example?')
+    await page.locator('#rec-cancel').click()
+    await expect(page.locator('#landing')).toBeVisible()
+    expect(asked).toBe(0)
+    expect(new URL(page.url()).searchParams.get('packs')).toBeNull()
+})
+
 test('a Markdown file cannot smuggle a javascript: link, a form or a style through the change marks', async ({page}) => {
     const path = '/repos/repalash/threepipe/contents/website/package/plugin-cloud.md?ref=' + HEAD
     const original = fs.readFileSync(new URL(JSON.parse(fs.readFileSync(new URL('index.json', FIXTURE_DIR)))[path].file, FIXTURE_DIR), 'utf8')

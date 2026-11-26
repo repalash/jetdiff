@@ -1,5 +1,5 @@
-# Removing a downloaded repository keeps its pack data
+# Removing a downloaded repository keeps its snapshot files
 
-`removeRepo` (js/offline.js) removes the repository's saved API responses and file contents (and works where the page
-has no Cache Storage), but leaves its files in `jd-pack`, `jd-snap` and the in-memory packs, so an imported pack of it
-still opens.
+`removeRepo` (js/offline.js) removes the repository's saved API responses and file contents, and what the imported
+packs hold of it (`jd-pack` or the in-memory packs), but leaves the snapshot files in `jd-snap`, so a snapshot of it
+still opens offline.

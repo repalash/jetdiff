@@ -1,6 +1,6 @@
 import {
-    CONTENTS_CACHE, forgetLoaded, getFileContent, getTimeline, listOpenPulls, listPullRequests, loadChangeSet, PACK_CACHE,
-    packMemory, packUrl, setSnapshot, snapshotName, SNAP_CACHE, STORAGE_FULL,
+    CONTENTS_CACHE, forgetLoaded, forgetPackIndex, getFileContent, getTimeline, listOpenPulls, listPullRequests, loadChangeSet, PACK_CACHE,
+    packMemory, packUrl, setSnapshot, SNAP_CACHE, STORAGE_FULL,
 } from './github.js'
 import {languageForPath, loadMonaco, preloadForOffline} from './editor.js'
 import {loadMarkdown} from './markdown.js'
@@ -153,7 +153,23 @@ export async function downloadRepo(owner, repo, {numbers = null, commits = true,
     }
 }
 
-/** Removes a repository's saved responses and contents. */
+/** The imported packs' files (index.json and repos.json among them): in Cache Storage, else in memory (a sandboxed page). */
+async function packStore(create = true) {
+    let cache = null
+    try { if (create || await caches.has(PACK_CACHE)) cache = await caches.open(PACK_CACHE) } catch { /* sandboxed: memory */ }
+    return {
+        persisted: !!cache,
+        async read(k) {
+            if (packMemory.has(k)) return parseJson(packMemory.get(k))
+            const hit = cache && await cache.match(packUrl(k))
+            return hit ? hit.json() : null
+        },
+        put: async (k, bytes) => cache ? cache.put(packUrl(k), new Response(bytes)) : packMemory.set(k, bytes),
+        drop: async (k) => cache ? cache.delete(packUrl(k)) : packMemory.delete(k),
+    }
+}
+
+/** Removes a repository's saved responses and contents, and what the imported packs hold of it. */
 export async function removeRepo(owner, repo) {
     const re = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     // its API paths and its searches (`repo:owner/name`), not those of a repository whose name starts the same
@@ -165,6 +181,16 @@ export async function removeRepo(owner, repo) {
             for (const req of await cache.keys()) if (ours.test(decode(req.url))) await cache.delete(req)
         }
     } catch { /* a sandboxed page has no Cache Storage */ }
+    const packs = await packStore(false)
+    const index = await packs.read('index.json')
+    if (index) {
+        const kept = Object.fromEntries(Object.entries(index).filter(([k]) => !ours.test(decode(k))))
+        const used = new Set(Object.values(kept).map((e) => e.file))
+        for (const [k, e] of Object.entries(index)) if (!(k in kept) && !used.has(e.file)) await packs.drop(e.file)
+        await packs.put('index.json', encodeJson(kept))
+        await packs.put('repos.json', encodeJson((await packs.read('repos.json') || []).filter((r) => !sameRepo(r, {owner, repo}))))
+        forgetPackIndex()
+    }
     forgetLoaded(owner, repo)
     saveRepos(offlineRepos().filter((r) => !sameRepo(r, {owner, repo})))
 }
@@ -175,6 +201,7 @@ export async function clearOffline() {
         for (const name of SAVED) await caches.delete(name)
     } catch { /* a sandboxed page has no Cache Storage */ }
     packMemory.clear()
+    forgetPackIndex()
     // what this tab read is read again: a download right after must save it
     forgetLoaded()
     setSnapshot('')
@@ -183,7 +210,7 @@ export async function clearOffline() {
 
 /** Whether clearOffline has anything to remove: downloads, packs, and what browsing or a stopped download kept. */
 export async function hasSavedData() {
-    if (offlineRepos().length || packMemory.size || snapshotName() === 'pack') return true
+    if (offlineRepos().length || packMemory.size) return true
     try {
         for (const name of SAVED) if (await caches.has(name)) return true
     } catch { /* a sandboxed page has no Cache Storage */ }
@@ -201,10 +228,11 @@ export function appOffline() {
 }
 
 /**
- * Imports an offline pack (a .zip of a snapshot, from tools/make-pack.py), merged with the packs imported before.
- * Returns {repos, files, persisted}: not persisted where the page has no Cache Storage (kept until the tab closes).
+ * Imports an offline pack (a .zip of a snapshot, from tools/make-pack.py), merged with the packs imported before: it
+ * answers for GitHub when GitHub cannot be reached. `from`: where it came from (a host, or the file's name), shown with
+ * its data. Returns {repos, files, persisted}: not persisted where the page has no Cache Storage (kept until the tab closes).
  */
-export async function importPack(file, onProgress = () => {}) {
+export async function importPack(file, onProgress = () => {}, {from = file.name || ''} = {}) {
     await keepStorage()
     const {unzip, unzipSync} = await import(FFLATE)
     const buf = new Uint8Array(await file.arrayBuffer())
@@ -218,14 +246,7 @@ export async function importPack(file, onProgress = () => {}) {
     const prefix = indexPath.slice(0, -'index.json'.length)
     const index = parseJson(entries[prefix + 'index.json'])
     const repos = entries[prefix + 'repos.json'] ? parseJson(entries[prefix + 'repos.json']) : []
-    let cache = null
-    try { cache = await caches.open(PACK_CACHE) } catch { /* sandboxed: memory */ }
-    const read = async (k) => {
-        if (packMemory.has(k)) return parseJson(packMemory.get(k))
-        const hit = cache && await cache.match(packUrl(k))
-        return hit ? hit.json() : null
-    }
-    const put = async (k, bytes) => cache ? cache.put(packUrl(k), new Response(bytes)) : packMemory.set(k, bytes)
+    const {read, put, persisted} = await packStore()
     const files = Object.keys(entries).filter((k) => k.startsWith(prefix) && !k.endsWith('/') && !k.endsWith('index.json') && !k.endsWith('repos.json'))
     for (let i = 0; i < files.length; i++) {
         await put(files[i].slice(prefix.length), entries[files[i]])
@@ -236,14 +257,14 @@ export async function importPack(file, onProgress = () => {}) {
     const oldRepos = (await read('repos.json') || []).filter((r) => !isNew(r))
     await put('index.json', encodeJson({...oldIndex, ...index}))
     await put('repos.json', encodeJson([...oldRepos, ...repos]))
-    setSnapshot('pack')
+    forgetPackIndex()
     // offline, the editor and the grammars come from the saved app
     if (navigator.onLine) {
         try { await preloadApp(LANGUAGES) } catch { /* later */ }
     }
     const list = offlineRepos().filter((r) => !isNew(r))
-    saveRepos([...repos.map((r) => ({...r, commits: true, at: Date.now(), pack: true})), ...list])
-    return {repos, files: files.length, persisted: !!cache}
+    saveRepos([...repos.map((r) => ({...r, commits: true, at: Date.now(), pack: true, from})), ...list])
+    return {repos, files: files.length, persisted}
 }
 
 // the service worker keeps what the page fetched: the web fonts' stylesheet and their files

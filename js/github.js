@@ -109,13 +109,13 @@ async function keep(cache, url, res) {
     return new Response(buf, {status: res.status, statusText: res.statusText, headers: res.headers})
 }
 
-/** `load()`'s response for `url`, kept in the cache `name` (only for what never changes). */
+/** `load()`'s response for `url`, kept in the cache `name` (only for what never changes; never a pack's answer). */
 async function cachedFetch(name, url, load) {
     const cache = await openCache(name)
     const hit = await cache?.match(url).catch(() => null)
     if (hit) return hit
     const res = await load()
-    return cache && res.ok ? keep(cache, url, res) : res
+    return cache && res.ok && !res.headers.get('x-jd-pack') ? keep(cache, url, res) : res
 }
 
 /** `url` from the network, kept in the cache `name`; the kept copy when the network fails. */
@@ -142,33 +142,96 @@ function memo(map, key, load) {
     return map.get(key)
 }
 
-// `?snap=` is a name (snap/<name>/ next to the page), an https URL of a snapshot folder, or `pack` (imported offline
-// packs). Kept in localStorage, as an installed app starts at ./ with no ?snap=; where a sandboxed page has no
-// storage, in window.name, which lasts while the tab navigates.
+/** An https URL on another site than this page's. */
+export function otherSite(u) {
+    try { return /^https:\/\//i.test(u) && new URL(u).origin !== location.origin } catch { return false }
+}
+
+// a `?snap=` link to another site's data waits for the user's yes (main.js asks)
+let askSnap = ''
+
+// `?snap=` is a name (snap/<name>/ next to the page) or an https URL of a snapshot folder. Kept in localStorage, as an
+// installed app starts at ./ with no ?snap=; where a sandboxed page has no storage, in window.name, which lasts while
+// the tab navigates. `pack` was the imported offline packs: they are an offline fallback now (fromPack), so an install
+// that has it set drops it, and keeps the packs.
 let SNAP = (() => {
-    const s = new URLSearchParams(location.search).get('snap')
+    let s = new URLSearchParams(location.search).get('snap')
+    if (s === 'pack') s = null
+    const wait = (kept) => {
+        if (!s || s === kept || !otherSite(s)) return false
+        askSnap = s
+        return true
+    }
     try {
+        if (localStorage.getItem(SNAP_KEY) === 'pack') localStorage.removeItem(SNAP_KEY)
+        if (wait(localStorage.getItem(SNAP_KEY) || '')) s = null
         if (s !== null) s ? localStorage.setItem(SNAP_KEY, s) : localStorage.removeItem(SNAP_KEY)
         return localStorage.getItem(SNAP_KEY) || ''
     } catch { /* no storage (a sandboxed page): window.name keeps it instead; elsewhere any site could set it */ }
+    if (window.name === SNAP_NAME + 'pack') window.name = ''
+    if (wait(window.name.startsWith(SNAP_NAME) ? window.name.slice(SNAP_NAME.length) : '')) s = null
     if (s !== null) window.name = s ? SNAP_NAME + s : ''
     return s || (window.name.startsWith(SNAP_NAME) ? window.name.slice(SNAP_NAME.length) : '')
 })()
+
+/** The other site's snapshot URL a link asked to open, until the user answered (`answerSnapshot`); else ''. */
+export const snapshotToAsk = () => askSnap
+
+/** Opens the snapshot the link asked for (`yes`), or forgets the ask. */
+export function answerSnapshot(yes) {
+    if (yes && askSnap) setSnapshot(askSnap)
+    askSnap = ''
+}
+
 const remoteSnap = () => /^https:\/\//.test(SNAP)
 const snapFile = (f) => remoteSnap()
     ? new URL(f, SNAP.endsWith('/') ? SNAP : SNAP + '/')
     : new URL(`../snap/${encodeURIComponent(SNAP)}/${f}`, import.meta.url)
 export const snapshotName = () => SNAP
 
+let snapDate = null
+/** {host, date?} of the snapshot shown: where its data comes from, and when it was recorded if its server says. */
+export async function snapshotInfo() {
+    if (!SNAP) return null
+    const host = remoteSnap() ? new URL(SNAP).host : location.host
+    await loadSnapIndex().catch(() => {})
+    return {host, date: snapDate}
+}
+
 export const packUrl = (f) => `https://pack.jd/${f}`
 /** Packs held in memory where the page has no Cache Storage: file -> bytes. */
 export const packMemory = new Map()
 
+/** A file of the imported packs, or null. */
+async function packFile(f) {
+    if (packMemory.has(f)) return new Response(packMemory.get(f))
+    return await (await openCache(PACK_CACHE))?.match(packUrl(f)).catch(() => null) || null
+}
+
+let packIndex
+/** Told when it changed: the packs' index is read again. */
+export function forgetPackIndex() { packIndex = null }
+
+/** Told with {url} when an imported pack answered for GitHub (main.js shows where the data comes from). */
+export const PACK_ANSWER = 'jd-pack-answer'
+
+/**
+ * The imported packs' answer for a request GitHub could not answer (no network), or null when they do not hold it.
+ * Marked `x-jd-pack`: recorded data, never kept as GitHub's.
+ */
+async function fromPack(url, method) {
+    packIndex ??= packFile('index.json').then((r) => r ? r.json() : {}).catch(() => ({}))
+    const e = (await packIndex)[snapKey(url, method)]
+    if (!e) return null
+    const res = await packFile(e.file)
+    // a pack in parts, imported in part, has the whole index but not every file
+    if (!res) throw new GitHubError('Not in the imported packs (a pack in parts needs all of them)', 404)
+    window.dispatchEvent(new CustomEvent('jd-offline'))
+    window.dispatchEvent(new CustomEvent(PACK_ANSWER, {detail: {url}}))
+    return new Response(await res.arrayBuffer(), {status: e.status, headers: {'Content-Type': e.type, 'x-jd-pack': '1'}})
+}
+
 async function snapFetch(f) {
-    if (SNAP === 'pack') {
-        if (packMemory.has(f)) return new Response(packMemory.get(f))
-        return await (await openCache(PACK_CACHE))?.match(packUrl(f)).catch(() => null) || new Response('', {status: 404})
-    }
     const url = snapFile(f).href
     // a snapshot folder at a URL never changes (a new recording gets a new folder); one next to the page can be
     // recorded again, so it is read fresh, and kept for offline use
@@ -178,6 +241,11 @@ async function snapFetch(f) {
 export function setSnapshot(v) {
     SNAP = v || ''
     snapIndex = null
+    snapDate = null
+    // a snapshot offers no sign-in; live GitHub may
+    authConfigPromise = null
+    // what was read is the other source's
+    forgetLoaded()
     try {
         v ? localStorage.setItem(SNAP_KEY, v) : localStorage.removeItem(SNAP_KEY)
     } catch { window.name = v ? SNAP_NAME + v : '' }
@@ -189,17 +257,21 @@ function snapKey(url, method = 'GET') {
 }
 
 let snapIndex
-async function snapRequest(url, method) {
+function loadSnapIndex() {
     snapIndex ??= snapFetch('index.json').then((r) => {
         if (!r.ok) throw new GitHubError(`Snapshot "${SNAP}" not found`, r.status)
+        snapDate = r.headers.get('last-modified')
         return r.json()
     })
-    const index = await snapIndex
+    return snapIndex
+}
+
+async function snapRequest(url, method) {
+    const index = await loadSnapIndex()
     const e = index[snapKey(url, method)]
     if (!e) throw new GitHubError('Not in this snapshot (it has only what was recorded)', 404)
     const res = await snapFetch(e.file)
-    // a pack in parts, imported in part, has the whole index but not every file
-    if (!res.ok) throw new GitHubError(SNAP === 'pack' ? 'Not in the imported packs (a pack in parts needs all of them)' : `Missing from snapshot "${SNAP}"`, 404)
+    if (!res.ok) throw new GitHubError(`Missing from snapshot "${SNAP}"`, 404)
     return new Response(await res.arrayBuffer(), {status: e.status, headers: {'Content-Type': e.type}})
 }
 
@@ -220,8 +292,17 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
     if (body) headers['Content-Type'] = 'application/json'
     // GitHub allows a minute of caching: revalidated (a 304 costs no rate limit), else a ref or PR head can be stale
     const send = () => fetch(url, {method, headers, body: body && JSON.stringify(body), cache: 'no-cache', signal})
-    let res = await send()
-    if (res.status === 401 && signedIn()) {
+    // GitHub could not be reached: the imported packs answer what they hold (never what must be current)
+    const fallback = () => live || signal?.aborted ? null : fromPack(url, method)
+    let res
+    try {
+        res = await send()
+    } catch (e) {
+        if (!(e instanceof TypeError)) throw e
+        res = await fallback()
+        if (!res) throw e
+    }
+    if (res.status === 401 && signedIn() && !res.headers.get('x-jd-pack')) {
         token = await renewToken()
         if (token) headers.Authorization = `Bearer ${token}`
         else delete headers.Authorization
@@ -232,6 +313,8 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
     if (res.headers.get('x-jd-offline')) {
         window.dispatchEvent(new CustomEvent('jd-offline'))
         if (live) throw new GitHubError('No network: GitHub could not be reached', 503)
+        // the service worker had no saved copy
+        if (res.status === 503) res = await fallback() || res
     }
     if (!res.ok) {
         let message = res.statusText || `HTTP ${res.status}`
@@ -508,8 +591,11 @@ export function getFileContent(owner, repo, ref, path, {signal} = {}) {
     const url = `${API}/repos/${owner}/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`
     return memo(contentCache, url, async () => {
         const load = () => request(url, {accept: 'application/vnd.github.raw+json', signal})
-        // contents at a commit sha never change: kept for fast reopening (on a phone) and offline use
-        const res = /^[0-9a-f]{40}$/.test(ref) ? await cachedFetch(CONTENTS_CACHE, url, load) : await load()
+        // contents at a commit sha never change: kept for fast reopening (on a phone) and offline use; a snapshot's
+        // are its own (another site's data never becomes GitHub's here)
+        const res = /^[0-9a-f]{40}$/.test(ref) && !SNAP ? await cachedFetch(CONTENTS_CACHE, url, load) : await load()
+        // a pack's answer is for while GitHub cannot be reached: read again next time
+        if (res.headers.get('x-jd-pack')) setTimeout(() => contentCache.delete(url))
         const bytes = new Uint8Array(await res.arrayBuffer())
         if (looksBinary(bytes)) return {binary: true, size: bytes.length, blob: new Blob([bytes])}
         // a BOM stays in the text (Monaco keeps it aside), so a commit writes it back
