@@ -155,7 +155,8 @@ npm start
 npm run record -- http://localhost:3000/ owner/repo/123 demo     # into snap/demo/
 ```
 
-Then open `http://localhost:3000/?snap=demo&pr=owner/repo/123`. With `--repos owner/a,owner/b` instead of one pull
+Then open `?snap=demo&pr=owner/repo/123` on a site that serves `snap/demo/` next to the page (`npm start` serves only
+the build, not `snap/`: see `issues/open/local-snapshots-under-wrangler-dev.md`). With `--repos owner/a,owner/b` instead of one pull
 request, the recorder saves every open pull request of those repositories, and `npm run pack -- snap/demo packs/`
 turns that into offline packs (.zip) to import from the start page or by dropping them on the page, or to download
 with a link, `?packs=<folder>` (a folder with a `packs.json` listing them). A snapshot or a pack of a private
@@ -170,16 +171,19 @@ pull requests a pack holds open from it, under the same bar.
 
 ```sh
 npm install
-npm start        # http://localhost:3000/
+npm start        # http://localhost:3000/, on all interfaces
 npm test         # Playwright, against a recorded pull request in tests/fixture
 ```
 
-AGENTS.md describes the layout and the conventions. There is no bundler: the dev server serves the files as they are,
-and the libraries from `node_modules` at `vendor/<name>@<version>/`, the paths the build copies them to. The service
-worker keeps the release it installed, so with `npm start` a change shows after the next reload brings the new release
-in (or with *Update on reload* in the browser's developer tools). After changing a library's version, run
+AGENTS.md describes the layout and the conventions. `npm start` and the tests run the site as jetdiff.com serves it:
+`wrangler dev` runs the Worker and Cloudflare's static asset server locally (in workerd), on the build in `dist/`, which
+it makes on start and again when a file of the site changes (`build` in `wrangler.jsonc`). There is no bundler: the
+build copies the app's files as they are, and the libraries from `node_modules` to `vendor/<name>/<version>/`, a scope
+as a folder (`vendor/fontsource/inter/5.3.0/`), as the asset server answers a path with an `@` with a redirect. The
+service worker keeps the release it installed, so with `npm start` a change shows after the next reload brings the new
+release in (or with *Update on reload* in the browser's developer tools). After changing a library's version, run
 `npm run vendor`: it writes the versions into `index.html` (the import map and the font stylesheets) and the import
-map's hash into the Content Security Policy (`worker/headers.js`); the dev server and the build refuse to start until
+map's hash into the Content Security Policy (`worker/headers.js`); the build (and so `npm start`) refuses to run until
 they match `node_modules`. Dependabot proposes updates weekly, of releases at least a week old
 (`.github/dependabot.yml`), and `.github/workflows/vendor.yml` runs `npm run vendor` on its pull requests.
 `js/themes.js` is generated from [Material Theme UI Lite](https://github.com/AtomMaterialUI/material-theme-ui-lite):
@@ -193,12 +197,15 @@ npm run themes -- /tmp/mtui
 
 [jetdiff.com](https://jetdiff.com) is a Cloudflare Worker with static assets (`wrangler.jsonc`, `worker/index.js`):
 `npm run build` copies the files the site serves into `dist/` (the libraries into `dist/vendor/`, about 700 files and
-24 MiB in all, and `sw.js` with a release id: a hash of the app's files), and `npm run deploy` builds and deploys
-them with wrangler. GitHub Actions deploys `main` after the tests pass (`.github/workflows/ci.yml`), with the repository
-secrets `CLOUDFLARE_API_TOKEN` (an account token with *Individual Workers Editor* on the jetdiff Worker only) and
-`CLOUDFLARE_ACCOUNT_ID`, and optionally `APP_CLIENT_SECRET` to update the GitHub App's client secret. The domains are
-attached to the Worker in the Cloudflare dashboard, so the token needs no zone or DNS rights. The Worker runs first on each request for request logs, the `www` redirect and the security headers, with a Content
-Security Policy on the pages (`worker/headers.js`).
+24 MiB in all, and `sw.js` with a release id: a hash of the app's files and its security headers), and `npm run deploy`
+builds and deploys them with wrangler (a dev dependency, the one `npm start` runs). GitHub Actions deploys `main` after
+the tests pass (`.github/workflows/ci.yml`), with the repository secrets `CLOUDFLARE_API_TOKEN` (an account token with
+*Individual Workers Editor* on the jetdiff Worker only) and `CLOUDFLARE_ACCOUNT_ID`, and optionally `APP_CLIENT_SECRET`
+to update the GitHub App's client secret. The domains are attached to the Worker in the Cloudflare dashboard, so the
+token needs no zone or DNS rights. The Worker runs first on
+each request for request logs, the `www` redirect and the security headers, with a Content Security Policy on the pages
+(`worker/headers.js`), but for the libraries' (`vendor/`): those are static asset requests, which are not metered, and
+get the same headers from `dist/_headers`.
 Any static host works too: serve `dist/` after `npm run build`, with `404.html` for missing paths and, for the
 policy, the headers of `worker/headers.js`.
 

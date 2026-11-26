@@ -14,5 +14,11 @@ export default defineConfig({
         {name: 'desktop', use: {viewport: {width: 1440, height: 900}}, grepInvert: /@phone/},
         {name: 'phone', use: {...devices['iPhone 13'], browserName: 'chromium'}, grep: /@phone/},
     ],
-    webServer: {command: 'node tools/serve.mjs', env: {PORT: String(port)}, port, reuseExistingServer: !process.env.CI},
+    // the Worker and Cloudflare's static asset server, as wrangler dev runs them (it builds dist/ first), without Sign in
+    // with GitHub, whatever secret .dev.vars holds: the tests that sign in answer /auth/ themselves
+    webServer: {
+        command: `npx wrangler dev --ip 127.0.0.1 --port ${port} --var GITHUB_CLIENT_ID: --var GITHUB_APP_SLUG:`,
+        port,
+        reuseExistingServer: !process.env.CI,
+    },
 })

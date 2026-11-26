@@ -17,6 +17,7 @@ jobs:
       # index.html and worker/headers.js name the installed libraries (on a Dependabot branch, vendor.yml commits that)
       - run: npm run vendor -- --check
       - run: npx playwright install --with-deps chromium
+      # on wrangler dev (playwright.config.js), whose workerd binary npm ci installed
       - run: npm test
 
   # jetdiff.com: the Cloudflare Worker, deployed from main once the tests pass
@@ -43,4 +44,4 @@ jobs:
         run: npm run deploy
       # the GitHub App's client secret (Sign in with GitHub), when the repository has it
       - if: env.CLOUDFLARE_API_TOKEN != '' && env.APP_CLIENT_SECRET != ''
-        run: printf '%s' "$APP_CLIENT_SECRET" | npx wrangler@4.158.0 secret put GITHUB_CLIENT_SECRET
+        run: printf '%s' "$APP_CLIENT_SECRET" | npx wrangler secret put GITHUB_CLIENT_SECRET

@@ -1,8 +1,8 @@
-// The security headers of the site's responses: the Worker sends them (index.js), and the dev server the tests run
-// against (tools/serve.mjs) sends the same.
+// The security headers of the site's responses: the Worker sends them (index.js), and dist/_headers gives the same to
+// the files the static asset server answers without it (the libraries).
 
 // index.html's import map, the app's one inline script (npm run vendor writes this when the libraries change)
-export const IMPORT_MAP_HASH = 'sha256-hC54ijBPep8MZSBUYSC+Xb3WdvVBX9v/4rqBiEK8SOs='
+export const IMPORT_MAP_HASH = 'sha256-sr1wG3TDvNEMcbEfW3oiKKYq9///5w5gTYijhCYFQcA='
 
 // Only what the app needs. Everything it runs comes from the site (the libraries too, in vendor/). Monaco sets inline
 // styles. Images: the site, the diff's own blob: and data: images, and any https image, as Markdown previews show remote
@@ -24,6 +24,14 @@ export const CONTENT_SECURITY_POLICY = [
     "base-uri 'none'",
     "object-src 'none'",
 ].join('; ')
+
+/**
+ * dist/_headers, for the files the static asset server answers without the Worker (wrangler.jsonc run_worker_first):
+ * the libraries in vendor/, with the Content Security Policy too, for the 404 page a missing one answers with.
+ */
+export function headersFile() {
+    return '/vendor/*\n' + Object.entries(securityHeaders('', true)).map(([k, v]) => `  ${k}: ${v}\n`).join('')
+}
 
 /** The headers for a response of this content type; `document`: it answers a navigation. */
 export function securityHeaders(contentType, document = false) {

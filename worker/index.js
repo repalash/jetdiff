@@ -1,6 +1,6 @@
-// Serves the static assets (dist/). Running first on every request gives request logs (Workers Logs, without the
-// query) and adds what the asset server does not: the www redirect, sign-in (auth.js) and the security headers, with
-// the Content Security Policy (headers.js).
+// Serves the static assets (dist/). Running first on every request but the libraries' (vendor/, see wrangler.jsonc)
+// gives request logs (Workers Logs, without the query) and adds what the asset server does not: the www redirect,
+// sign-in (auth.js) and the security headers, with the Content Security Policy (headers.js).
 import {auth} from './auth.js'
 import {securityHeaders} from './headers.js'
 

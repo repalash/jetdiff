@@ -5,17 +5,18 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "start": "node tools/serve.mjs",
+    "start": "wrangler dev",
     "test": "playwright test",
     "build": "node tools/build.mjs",
-    "deploy": "npx wrangler@4.158.0 deploy",
+    "deploy": "wrangler deploy",
     "record": "node tools/record-snapshot.cjs",
     "pack": "python3 tools/make-pack.py",
     "themes": "node tools/material-themes.mjs",
     "vendor": "node tools/site.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "wrangler": "4.158.0"
   },
   "dependencies": {
     "@fontsource/inter": "5.3.0",

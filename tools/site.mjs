@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// What the site serves, shared by the dev server (serve.mjs) and the build (build.mjs): the app's own files, the
-// libraries copied as they are from node_modules to vendor/<name>@<version>/, and the service worker with its release.
+// What the site serves, written into dist/ by the build (build.mjs): the app's own files, the libraries copied as they
+// are from node_modules to vendor/<name>/<version>/, and the service worker with its release.
 // `npm run vendor` writes the libraries' versions into index.html (the import map, the font stylesheets) and the import
 // map's hash into the Content Security Policy (worker/headers.js); run it after changing a library's version.
 import crypto from 'node:crypto'
@@ -18,9 +18,12 @@ export const FILES = [
     'docs/hero.webp', 'docs/phone.webp', 'js', 'icons',
 ]
 
-/** What the service worker keeps of each release, fetched together at install (sw.js). */
+/**
+ * What the service worker keeps of each release, fetched together at install (sw.js). The pages at the URLs Cloudflare's
+ * asset server answers them at, with no redirect: index.html at ./, 404.html at ./404.
+ */
 export const SHELL_FILES = [
-    './', './index.html', './404.html', './style.css', './manifest.webmanifest', './docs/hero.webp', './docs/phone.webp',
+    './', './404', './style.css', './manifest.webmanifest', './docs/hero.webp', './docs/phone.webp',
     './js/main.js', './js/github.js', './js/editor.js', './js/themes.js', './js/sbs.js', './js/tree.js', './js/icons.js',
     './js/log.js', './js/palette.js', './js/markdown.js', './js/tooltip.js', './js/offline.js', './js/util.js',
     './js/update.js', './js/redirect.js', './js/support.js', './js/keymap.js', './js/goto.js', './js/declarations.js', './js/typescript.js',
@@ -31,7 +34,7 @@ export const SHELL_FILES = [
 const MODULES = ['shiki/core', 'shiki/engine/javascript', 'shiki/langs', 'markdown-it', 'dompurify', 'fflate']
 // Imported by a path under the package (an import map prefix): what is copied, and what the page loads on start
 const PREFIXES = {
-    // Monaco's AMD build, loaded by its own loader from vendor/monaco-editor@<version>/min/vs
+    // Monaco's AMD build, loaded by its own loader from vendor/monaco-editor/<version>/min/vs
     'monaco-editor/': {
         files: (rel) => rel.startsWith('min/vs/'),
         start: ['min/vs/loader.js', 'min/vs/editor/editor.main.js', 'min/vs/editor/editor.main.css',
@@ -66,7 +69,10 @@ function pkg(name) {
 }
 
 const nameOf = (spec) => spec.split('/').slice(0, spec.startsWith('@') ? 2 : 1).join('/')
-const vendorPath = (p, rel) => `vendor/${p.name}@${p.version}/${rel}`
+// vendor/<name>/<version>/, a scope as a folder (@fontsource/inter: vendor/fontsource/inter/5.3.0/): no @ in a URL, as
+// Cloudflare's asset server answers a path that encodeURIComponent changes with a redirect to the encoded one
+const vendorDir = (p) => `vendor/${p.name.replace(/^@/, '')}/${p.version}/`
+const vendorPath = (p, rel) => vendorDir(p) + rel
 
 // A bare specifier's file, by the package's "exports" (the browser's or the ES module's), as a bundler would find it
 function resolve(spec) {
@@ -117,7 +123,7 @@ export function vendor() {
     }
     for (const [prefix, {files: keep, start: onStart}] of Object.entries(PREFIXES)) {
         const p = pkg(prefix.slice(0, -1))
-        imports[prefix] = `./vendor/${p.name}@${p.version}/`
+        imports[prefix] = './' + vendorDir(p)
         for (const rel of listFiles(p.dir)) if (keep(rel)) add(p, rel, onStart.includes(rel))
         for (const rel of onStart) if (!files.has(vendorPath(p, rel))) throw new Error(`${p.name}: no ${rel}`)
     }
@@ -148,10 +154,10 @@ export const scriptHash = (text) => `sha256-${crypto.createHash('sha256').update
 
 /** index.html with the libraries' current import map and versions. */
 function currentIndex(html) {
-    const versions = new Map([...packages.values()].map((p) => [p.name, p.version]))
     vendor()
+    // vendor/<name>/<version>/: two folders before the version are a scope and a name
     return html.replace(IMPORT_MAP, (m, a, b, c) => a + importMapText() + c)
-        .replace(/vendor\/((?:@[\w.-]+\/)?[\w.-]+)@[^/]+\//g, (m, name) => `vendor/${name}@${versions.get(name) ?? pkg(name).version}/`)
+        .replace(/vendor\/([\w.-]+(?:\/[\w.-]+)??)\/\d+\.\d+\.\d+[\w.-]*\//g, (m, dir) => vendorDir(pkg(dir.includes('/') ? '@' + dir : dir)))
 }
 
 /** Why index.html or the Content Security Policy does not match node_modules (run npm run vendor), or null. */
@@ -164,13 +170,17 @@ export async function checkVendor() {
     return null
 }
 
-const read = (f) => fs.readFileSync(path.join(ROOT, f === './' ? 'index.html' : f))
+const PAGES = {'./': 'index.html', './404': '404.html'}
+const read = (f) => fs.readFileSync(path.join(ROOT, PAGES[f] || f))
 
-/** sw.js with its release: a hash of the release's files, the worker's own code and the libraries it keeps. */
+/**
+ * sw.js with its release: a hash of the release's files, the worker's own code, the libraries it keeps and the security
+ * headers (worker/headers.js), as the release's pages are kept with the headers they had, their policy included.
+ */
 export function serviceWorker() {
     const template = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8')
     const libs = vendor().start.map((f) => './' + f)
-    const hash = crypto.createHash('sha256').update(template).update(JSON.stringify(libs))
+    const hash = crypto.createHash('sha256').update(template).update(JSON.stringify(libs)).update(fs.readFileSync(HEADERS_MODULE))
     for (const f of SHELL_FILES) hash.update(`\0${f}\0`).update(read(f))
     const release = hash.digest('hex').slice(0, 16)
     const list = (a) => JSON.stringify(a)

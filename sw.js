@@ -1,12 +1,12 @@
 // The offline app, updated a whole release at a time. At install, a release's files are fetched together into their
 // own cache (jd-shell-<release>), and the worker takes over only once all of them have arrived. A page then keeps the
 // release it was loaded with until it reloads (js/update.js tells it a new one is ready), so it never mixes the files
-// of two releases. The libraries (vendor/<name>@<version>/…) never change at a URL: they are kept once, in jd-libs,
+// of two releases. The libraries (vendor/<name>/<version>/…) never change at a URL: they are kept once, in jd-libs,
 // those the page starts with at install and the others (grammars) when first used.
 // The page keeps file contents at a commit (jd-contents-v1), snapshot files (jd-snap) and packs (jd-pack) itself; this
 // worker also keeps the GitHub API responses (not branch refs) and avatars.
 
-// The release: written by tools/site.mjs where the site is served or built (npm start, npm run build)
+// The release: written by tools/site.mjs when the site is built (npm run build, and wrangler dev for npm start)
 const RELEASE = 'unbuilt'
 const SHELL_FILES = []
 const LIB_FILES = []
@@ -135,7 +135,7 @@ async function page(e) {
         let res = null
         try { res = await fetch(req) } catch { /* offline */ }
         if (res && res.status !== 404) return res
-        hit = await caches.match(scoped('./404.html'), {cacheName: CURRENT})
+        hit = await caches.match(scoped('./404'), {cacheName: CURRENT})
         if (!hit) return res || Response.error()
     }
     remember(e)
@@ -153,10 +153,10 @@ async function shell(e) {
     return hit || fetch(e.request)
 }
 
-// `index.html?pr=…` and `./?pr=…` are the same page
+// `./?pr=…` is the page `./`
 function stripQuery(req) {
     const u = new URL(req.url)
-    if (!u.pathname.endsWith('/') && !u.pathname.endsWith('.html')) return req
+    if (!u.pathname.endsWith('/')) return req
     u.search = ''
     return new Request(u.href)
 }

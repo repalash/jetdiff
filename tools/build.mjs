@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // npm run build: copies the files the site serves into dist/ (the Worker's static assets): the app's own files, the
-// libraries from node_modules into dist/vendor/ (as they are, no bundling), and sw.js with its release (site.mjs)
+// libraries from node_modules into dist/vendor/ (as they are, no bundling), sw.js with its release (site.mjs) and the
+// libraries' headers (_headers). wrangler dev runs it too (wrangler.jsonc build), on start and when a file changes.
 import fs from 'node:fs'
 import path from 'node:path'
 import {checkVendor, FILES, ROOT as root, serviceWorker, vendor} from './site.mjs'
+import {headersFile} from '../worker/headers.js'
 
 // Cloudflare's limits for a Worker's static assets
 const MAX_FILES = 20000
@@ -18,6 +20,7 @@ const out = path.join(root, 'dist')
 fs.rmSync(out, {recursive: true, force: true})
 for (const f of FILES) fs.cpSync(path.join(root, f), path.join(out, f), {recursive: true})
 fs.writeFileSync(path.join(out, 'sw.js'), serviceWorker())
+fs.writeFileSync(path.join(out, '_headers'), headersFile())
 for (const [to, from] of vendor().files) {
     fs.mkdirSync(path.dirname(path.join(out, to)), {recursive: true})
     fs.copyFileSync(from, path.join(out, to))
