@@ -133,9 +133,11 @@ test('a phone shows the files in a drawer and the diff fits the screen @phone', 
 })
 
 test('a snapshot link opens recorded pull requests without a token, read-only', async ({page, context}) => {
-    await context.route('**/snap/fixture/**', (route) => route.fulfill({body: fs.readFileSync(new URL(new URL(route.request().url()).pathname.split('/snap/fixture/')[1], FIXTURE_DIR))}))
+    await context.route('https://other.example/snap/**', (route) => route.fulfill({headers: {'access-control-allow-origin': '*'},
+        body: fs.readFileSync(new URL(new URL(route.request().url()).pathname.split('/snap/')[1], FIXTURE_DIR))}))
     await context.route('https://api.github.com/**', (route) => route.abort())
-    await page.goto(`./?snap=fixture&pr=${PR}`)
+    await page.goto(`./?snap=${encodeURIComponent('https://other.example/snap/')}&pr=${PR}`)
+    await page.locator('#rec-open').click()
     await ready(page)
     await expect(page.locator('#tree .tr-file')).toHaveCount(5)
     await expect(page.locator('#btn-edit')).toBeHidden()

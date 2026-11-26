@@ -4,22 +4,26 @@ import {test, expect, ready, recorded, FIXTURE_DIR, PR, HEAD} from './fixture.js
 const PWN = '<img src=x onerror="window.__pwned=1">'
 const pwned = (page) => page.evaluate(() => !!window.__pwned)
 
-test('a snapshot with markup in its data cannot run script or link outside GitHub', async ({page, context}) => {
+test('a snapshot from another site, opened after a yes, cannot run script or link outside GitHub with markup in its data', async ({page, context}) => {
     const index = JSON.parse(fs.readFileSync(new URL('index.json', FIXTURE_DIR)))
     const evil = {
         '/repos/repalash/threepipe/pulls/193': (pr) => ({...pr, number: PWN, html_url: 'javascript:window.__pwned=1', state: PWN}),
         '/repos/repalash/threepipe/pulls/193/files?per_page=100&page=1': (files) => files.map((f) => ({...f, status: `x" onmouseover="window.__pwned=1`, additions: PWN})),
     }
     const byFile = Object.fromEntries(Object.entries(evil).map(([k, f]) => [index[k].file, f]))
-    await context.route('**/snap/evil/**', (route) => {
-        const name = new URL(route.request().url()).pathname.split('/snap/evil/')[1]
-        if (name === 'repos.json') return route.fulfill({json: [{owner: 'repalash', repo: 'threepipe', prs: [{number: PWN, title: 'x'}]}]})
+    await context.route('https://other.example/evil/**', (route) => {
+        const name = new URL(route.request().url()).pathname.split('/evil/')[1]
+        const headers = {'access-control-allow-origin': '*'}
+        if (name === 'repos.json') return route.fulfill({headers, json: [{owner: 'repalash', repo: 'threepipe', prs: [{number: PWN, title: 'x'}]}]})
         const body = fs.readFileSync(new URL(name, FIXTURE_DIR))
-        route.fulfill({body: byFile[name] ? JSON.stringify(byFile[name](JSON.parse(body))) : body})
+        route.fulfill({headers, body: byFile[name] ? JSON.stringify(byFile[name](JSON.parse(body))) : body})
     })
-    await page.goto('./?snap=evil')
+    const snap = encodeURIComponent('https://other.example/evil/')
+    await page.goto(`./?snap=${snap}`)
+    await page.locator('#rec-open').click()
     await expect(page.locator('#land-snap')).toContainText('1 pull requests')
-    await page.goto(`./?snap=evil&pr=${PR}`)
+    expect(await pwned(page)).toBe(false)
+    await page.goto(`./?snap=${snap}&pr=${PR}`)
     await ready(page)
     await page.locator('#tree .tr-file').first().hover()
     expect(await pwned(page)).toBe(false)
@@ -56,20 +60,35 @@ test('recorded data from another site opens only after a yes, under a bar with E
     expect(await snapSetting(page)).toBeNull()
 })
 
-test('a snapshot of this site shows the bar with no question; a packs link from another site asks first', async ({page, context}) => {
-    await context.route('**/snap/fixture/**', (route) => route.fulfill({body: fixtureFile(route.request().url(), '/snap/fixture/')}))
+test('a snapshot link opened before opens again with no question; a packs link from another site asks first', async ({page, context}) => {
     let asked = 0
-    await context.route('https://other.example/**', (route) => (asked++, route.abort()))
-    await page.goto(`./?snap=fixture&pr=${PR}`)
+    await context.route('https://other.example/packs/**', (route) => (asked++, route.abort()))
+    await context.route('https://other.example/snap/**', (route) => route.fulfill({headers: {'access-control-allow-origin': '*'}, body: fixtureFile(route.request().url(), '/snap/')}))
+    const link = `./?snap=${encodeURIComponent('https://other.example/snap/')}&pr=${PR}`
+    await page.goto(link)
+    await page.locator('#rec-open').click()
+    await ready(page)
+    await page.goto(link)
     await ready(page)
     await expect(page.locator('#dialog')).toBeHidden()
-    await expect(page.locator('#rec-bar')).toContainText(`Recorded data from ${new URL(page.url()).host}`)
+    await expect(page.locator('#rec-bar')).toContainText('Recorded data from other.example')
     await page.goto('./?snap=&packs=https://other.example/packs/')
     await expect(page.locator('#dialog h2')).toHaveText('Open recorded pull requests from other.example?')
     await page.locator('#rec-cancel').click()
     await expect(page.locator('#landing')).toBeVisible()
     expect(asked).toBe(0)
     expect(new URL(page.url()).searchParams.get('packs')).toBeNull()
+})
+
+test('a ?snap= or ?packs= value that is not an https URL opens nothing', async ({page, context}) => {
+    let asked = 0
+    await context.route(/\/(snap|packs)\//, (route) => (asked++, route.abort()))
+    await page.goto(`./?snap=fixture&packs=packs/&pr=${PR}`)
+    await ready(page)
+    await expect(page.locator('#dialog')).toBeHidden()
+    await expect(page.locator('#rec-bar')).toHaveCount(0)
+    expect(await snapSetting(page)).toBeNull()
+    expect(asked).toBe(0)
 })
 
 test('a Markdown file cannot smuggle a javascript: link, a form or a style through the change marks', async ({page}) => {

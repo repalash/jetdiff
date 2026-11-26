@@ -126,20 +126,6 @@ async function cachedFetch(name, url, load) {
     return cache && res.ok && !res.headers.get('x-jd-pack') ? keep(cache, url, res) : res
 }
 
-/** `url` from the network, kept in the cache `name`; the kept copy when the network fails. */
-async function freshFetch(name, url) {
-    const cache = await openCache(name)
-    let res
-    try {
-        res = await fetch(url)
-    } catch (e) {
-        const hit = await cache?.match(url).catch(() => null)
-        if (hit) return hit
-        throw e
-    }
-    return cache && res.ok ? keep(cache, url, res) : res
-}
-
 /** A promise kept in `map` under `key`, dropped when it fails (so a later call retries). */
 function memo(map, key, load) {
     if (!map.has(key)) {
@@ -150,19 +136,23 @@ function memo(map, key, load) {
     return map.get(key)
 }
 
-/** An https URL on another site than this page's. */
-export function otherSite(u) {
-    try { return /^https:\/\//i.test(u) && new URL(u).origin !== location.origin } catch { return false }
+/** An absolute https URL: what `?snap=` and `?packs=` take (anything else is ignored). */
+export function httpsUrl(u) {
+    try { return new URL(u).protocol === 'https:' } catch { return false }
 }
+
+/** An https URL on another site than this page's. */
+export const otherSite = (u) => httpsUrl(u) && new URL(u).origin !== location.origin
 
 // a `?snap=` link to another site's data waits for the user's yes (main.js asks)
 let askSnap = ''
 
-// `?snap=` is a name (snap/<name>/ next to the page) or an https URL of a snapshot folder. Kept in localStorage, as an
-// installed app starts at ./ with no ?snap=; where a sandboxed page has no storage, in window.name, which lasts while
-// the tab navigates.
+// `?snap=` is the https URL of a snapshot folder (empty leaves the snapshot). Kept in localStorage, as an installed app
+// starts at ./ with no ?snap=; where a sandboxed page has no storage, in window.name, which lasts while the tab
+// navigates.
 let SNAP = (() => {
     let s = new URLSearchParams(location.search).get('snap')
+    if (s && !httpsUrl(s)) s = null
     const wait = (kept) => {
         if (!s || s === kept || !otherSite(s)) return false
         askSnap = s
@@ -187,19 +177,15 @@ export function answerSnapshot(yes) {
     askSnap = ''
 }
 
-const remoteSnap = () => /^https:\/\//.test(SNAP)
-const snapFile = (f) => remoteSnap()
-    ? new URL(f, SNAP.endsWith('/') ? SNAP : SNAP + '/')
-    : new URL(`../snap/${encodeURIComponent(SNAP)}/${f}`, import.meta.url)
+const snapFile = (f) => new URL(f, SNAP.endsWith('/') ? SNAP : SNAP + '/')
 export const snapshotName = () => SNAP
 
 let snapDate = null
 /** {host, date?} of the snapshot shown: where its data comes from, and when it was recorded if its server says. */
 export async function snapshotInfo() {
     if (!SNAP) return null
-    const host = remoteSnap() ? new URL(SNAP).host : location.host
     await loadSnapIndex().catch(() => {})
-    return {host, date: snapDate}
+    return {host: new URL(SNAP).host, date: snapDate}
 }
 
 export const packUrl = (f) => `https://pack.jd/${f}`
@@ -237,9 +223,8 @@ async function fromPack(url, method) {
 
 async function snapFetch(f) {
     const url = snapFile(f).href
-    // a snapshot folder at a URL never changes (a new recording gets a new folder); one next to the page can be
-    // recorded again, so it is read fresh, and kept for offline use
-    return remoteSnap() ? cachedFetch(SNAP_CACHE, url, () => fetch(url)) : freshFetch(SNAP_CACHE, url)
+    // a snapshot folder at a URL never changes (a new recording gets a new folder)
+    return cachedFetch(SNAP_CACHE, url, () => fetch(url))
 }
 
 export function setSnapshot(v) {

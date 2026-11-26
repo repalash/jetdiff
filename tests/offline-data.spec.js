@@ -217,13 +217,14 @@ test.describe('with the service worker', () => {
     })
 
     test('snapshot files and packs are not kept as the app, and a snapshot still opens offline', async ({page, context}) => {
-        await context.route('**/snap/fixture/**', (route) => route.fulfill({body: fs.readFileSync(new URL(new URL(route.request().url()).pathname.split('/snap/fixture/')[1], FIXTURE_DIR))}))
-        await context.route('**/packs/**', (route) => route.fulfill({body: '[]'}))
-        await page.goto(`./?snap=fixture&pr=${PR}&file=${FILE}`)
+        await context.route('https://other.example/snap/**', (route) => route.fulfill({headers: cors, body: fs.readFileSync(new URL(new URL(route.request().url()).pathname.split('/snap/')[1], FIXTURE_DIR))}))
+        await context.route('https://other.example/packs/**', (route) => route.fulfill({headers: cors, body: '[]'}))
+        await page.goto(`./?snap=${encodeURIComponent('https://other.example/snap/')}&pr=${PR}&file=${FILE}`)
+        await page.locator('#rec-open').click()
         await controlled(page)
         await page.reload()
         await ready(page)
-        await page.evaluate(() => Promise.all(['./packs/packs.json', './packs/a.zip'].map((u) => fetch(u))))
+        await page.evaluate(() => Promise.all(['packs.json', 'a.zip'].map((f) => fetch('https://other.example/packs/' + f))))
         const shell = await page.evaluate(async () => (await caches.keys()).find((k) => k.startsWith('jd-shell-')))
         const kept = await cacheKeys(page, shell)
         expect(kept.filter((u) => /\/snap\/|\/packs\//.test(u))).toEqual([])

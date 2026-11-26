@@ -148,22 +148,24 @@ started with until it reloads, and says *jetdiff updated · Reload* once the new
 
 ### Snapshots and offline packs
 
-A snapshot is a set of recorded GitHub responses, for trying the app without a token or sharing a read-only copy:
+A snapshot is a set of recorded GitHub responses, for trying the app without a token or sharing a read-only copy.
+Locally, recorded data opens from offline packs (.zip): record every open pull request of some repositories, make
+packs of them, and import those on the page (drop them on it, or *Import offline pack* on the start page or in the
+Offline dialog):
 
 ```sh
 npm start
-npm run record -- http://localhost:3000/ owner/repo/123 demo     # into snap/demo/
+npm run record -- http://localhost:3000/ --repos owner/a,owner/b demo     # into snap/demo/
+npm run pack -- snap/demo packs/                                          # packs/owner-a.zip, packs/owner-b.zip
 ```
 
-Then open `?snap=demo&pr=owner/repo/123` on a site that serves `snap/demo/` next to the page (`npm start` serves only
-the build, not `snap/`: see `issues/open/local-snapshots-under-wrangler-dev.md`). With `--repos owner/a,owner/b` instead of one pull
-request, the recorder saves every open pull request of those repositories, and `npm run pack -- snap/demo packs/`
-turns that into offline packs (.zip) to import from the start page or by dropping them on the page, or to download
-with a link, `?packs=<folder>` (a folder with a `packs.json` listing them). A snapshot or a pack of a private
-repository contains its code.
+A link opens recorded data from an https site that serves it: `?snap=https://…/demo/&pr=owner/repo/123` a snapshot
+folder (one pull request is enough: `npm run record -- http://localhost:3000/ owner/repo/123 demo`), and
+`?packs=https://…/packs/` the packs a folder lists in its `packs.json`, downloaded and imported. Other values are
+ignored. A snapshot or a pack of a private repository contains its code.
 
 While a snapshot shows, a bar at the top says where its data comes from; Exit there goes back to live GitHub. A
-`?snap=https://…` or `?packs=…` link to another site asks first, as that data does not come from GitHub. Imported
+`?snap=https://…` or `?packs=https://…` link to another site asks first, as that data does not come from GitHub. Imported
 packs are a fallback for when GitHub cannot be reached: online, everything comes from GitHub; with no network, the
 pull requests a pack holds open from it, under the same bar.
 

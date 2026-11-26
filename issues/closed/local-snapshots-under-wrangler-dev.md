@@ -13,3 +13,9 @@ and skips links), so linking `snap/` in is no way. Options:
   `build.watch_dir` so that a new recording shows; costly for large snapshots, and one mistake from deploying them;
 - open local data through `?snap=https://…` and `?packs=https://…` from a static server with https on localhost;
 - a small script that serves `snap/` and `packs/` on another port, and the app accepts `http://localhost` for `?snap=`.
+
+Done, with none of these: local recorded data opens by importing packs only (dropped on the page, or Import offline
+pack on the start page or in the Offline dialog). `?snap=` and `?packs=` take https URLs only and ignore any other
+value (`?snap=` empty still leaves a snapshot): the snapshot name (`snap/<name>/` next to the page, read fresh with
+`freshFetch`) and the relative packs folder are gone. The tests open snapshots and packs from another site's https
+URLs, after the question. README, Snapshots and offline packs, says how to record, pack and import.

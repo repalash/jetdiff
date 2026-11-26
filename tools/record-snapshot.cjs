@@ -1,7 +1,9 @@
-// Records the GitHub API responses the page asks for into snap/<name>/, for `?snap=<name>` (GITHUB_TOKEN if set):
+// Records the GitHub API responses the page asks for into snap/<name>/ (GITHUB_TOKEN if set), for a site to serve at
+// `?snap=https://…`:
 //   node tools/record-snapshot.cjs http://localhost:3000/ owner/repo/123 [name]
 //   node tools/record-snapshot.cjs http://localhost:3000/ --repos owner/a,owner/b [name]
-// --repos records what Download for offline fetches for each repository.
+// --repos records what Download for offline fetches for each repository, which make-pack.py turns into offline packs
+// to import.
 // A snapshot of a private repository holds its code: do not commit or publish it.
 
 const {chromium} = require('playwright')

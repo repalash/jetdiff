@@ -1,6 +1,6 @@
 import {
     accountIdentity, answerSnapshot, authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
-    otherSite, PACK_ANSWER, paramsToTarget, RATE_LIMITED, parseTarget, listPullRequests, searchCode, searchMyPullRequests, setFileViewed, setSnapshot, setToken, snapshotInfo, snapshotName, snapshotRepos,
+    httpsUrl, otherSite, PACK_ANSWER, paramsToTarget, RATE_LIMITED, parseTarget, listPullRequests, searchCode, searchMyPullRequests, setFileViewed, setSnapshot, setToken, snapshotInfo, snapshotName, snapshotRepos,
     snapshotToAsk, targetToParams,
 } from './github.js'
 import {
@@ -519,11 +519,10 @@ async function route(force = false) {
     }
     renderRecordedBar()
     const packs = params.get('packs')
-    if (packs && !state.packsLoading) {
-        const base = new URL(packs, location.href)
+    if (httpsUrl(packs) && !state.packsLoading) {
         // a link imported before opens with no question (and no download)
-        if (!otherSite(base.href) || store.raw('packsFrom') === packsBase(packs)) return loadPacksFrom(packs)
-        return askRecorded(base.host, () => loadPacksFrom(packs), () => { dropParam('packs'); route(true) })
+        if (!otherSite(packs) || store.raw('packsFrom') === packsBase(packs)) return loadPacksFrom(packs)
+        return askRecorded(new URL(packs).host, () => loadPacksFrom(packs), () => { dropParam('packs'); route(true) })
     }
     const target = paramsToTarget(params)
     if (!target) {
@@ -1792,7 +1791,7 @@ function renderRecordedBar() {
         bar.className = 'rec-bar'
         document.body.prepend(bar)
     }
-    const from = snap ? /^https:\/\//.test(snap) ? new URL(snap).host : location.host : pack
+    const from = snap ? new URL(snap).host : pack
     const key = `${snap}|${from}`
     if (bar.dataset.key === key) return
     bar.dataset.key = key
@@ -1949,7 +1948,7 @@ function pickPack() {
 
 const packsBase = (folder) => folder.endsWith('/') ? folder : folder + '/'
 
-/** Downloads and imports the offline packs listed in <folder>/packs.json. */
+/** Downloads and imports the offline packs listed in <folder>/packs.json (an https URL). */
 async function loadPacksFrom(folder) {
     const base = packsBase(folder)
     // already imported on this device (the link opened again offline): no download
@@ -1983,7 +1982,7 @@ async function loadPacksFrom(folder) {
         }
         t.remove()
         // a sandboxed page keeps the packs in memory only: then the link has to download them again
-        if (await loadPacks(blobs, new URL(base, location.href).host)) {
+        if (await loadPacks(blobs, new URL(base).host)) {
             store.setRaw('packsFrom', base)
             history.replaceState(null, '', location.pathname)
         }
