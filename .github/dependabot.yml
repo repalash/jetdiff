@@ -9,6 +9,9 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    # until the port to Monaco 0.57 (branch later/library-upgrades) is merged: its releases need that porting
+    ignore:
+      - dependency-name: monaco-editor
     groups:
       libraries:
         dependency-type: production
