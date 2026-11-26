@@ -168,21 +168,31 @@ test('a two-dot compare shows the difference between the two tips', async ({page
     expect(new URL(page.url()).searchParams.get('compare')).toBe('repalash/threepipe/main..feature')
 })
 
-test('Next Difference at the top of a file goes to the first difference below the top', async ({page}) => {
+/** A file with differences at lines 2, 5 and 80, scrolled by hand back to its top. */
+async function scrolledToTop(page, number) {
     const old = lines(120)
     const changed = lines(120, (i) => [2, 5, 80].includes(i) ? `changed ${i}` : `line ${i}`)
-    const pr = fakePr(page.github, 9002, [{filename: 'src/a.ts', old, new: changed}])
+    const pr = fakePr(page.github, number, [{filename: 'src/a.ts', old, new: changed}])
     await page.goto(pr.url)
     await ready(page)
     await expect(page.locator('#diff-count')).toHaveText('3 differences')
-    const right = page.locator('.sbs-right')
-    await right.hover()
+    await page.locator('.sbs-right').hover()
     await page.mouse.wheel(0, 600)
     await page.waitForTimeout(200)
     await page.mouse.wheel(0, -2000)
     await page.waitForTimeout(200)
+}
+
+test('Next Difference at the top of a file goes to the first difference below the top', async ({page}) => {
+    await scrolledToTop(page, 9002)
     await page.locator('#btn-next-diff').click()
     await expect(page.locator('#st-pos')).toHaveText('Difference 1 of 3')
+})
+
+test('Previous Difference at the top of a file goes to a difference shown on screen before leaving the file', async ({page}) => {
+    await scrolledToTop(page, 9005)
+    await page.keyboard.press('Shift+F7')
+    await expect(page.locator('#st-pos')).toHaveText('Difference 2 of 3')
 })
 
 test('the Markdown preview shows character references as GitHub does', async ({page}) => {

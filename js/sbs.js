@@ -334,12 +334,13 @@ export class SideBySideViewer {
 
     /**
      * The index of the first change past the reading line in direction `dir`: a third down the right editor, as goTo
-     * shows a change, or its top when it is scrolled to the top (where goTo leaves the changes above that line).
+     * shows a change. Scrolled to the top, a step down starts from the top (goTo leaves the changes above that line
+     * there), and a step up still goes to a change shown above the line before leaving the file.
      */
     _refIndex(dir) {
         const h = this.right.getLayoutInfo().height
         const top = this.right.getScrollTop()
-        const ref = top < 1 ? -1 : (top + h / 3) / this.lineHeight
+        const ref = top < 1 && dir > 0 ? -1 : (top + h / 3) / this.lineHeight
         if (dir > 0) return this.changes.findIndex((c) => c.r0 > ref + 0.05)
         for (let i = this.changes.length - 1; i >= 0; i--) if (this.changes[i].r0 < ref - 0.05) return i
         return -1
