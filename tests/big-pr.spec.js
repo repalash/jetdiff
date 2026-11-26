@@ -35,6 +35,39 @@ for (const view of ['sbs', 'unified']) {
     })
 }
 
+/** Holds the GitHub requests `match` takes (a URL) until `release()`; `seen` counts them. */
+async function gate(page, match) {
+    let open
+    const opened = new Promise((r) => { open = r })
+    const g = {seen: 0, release: () => open()}
+    await page.route((u) => u.hostname === 'api.github.com' && match(u), async (route) => {
+        g.seen++
+        await opened
+        await route.fallback().catch(() => {})
+    })
+    return g
+}
+
+/** Opens another view of the page in place, as a link in it does. */
+const goTo = (page, url) => page.evaluate((u) => { history.pushState(null, '', u); dispatchEvent(new PopStateEvent('popstate')) }, url)
+
+test('switching to another pull request while a file loads never shows the first one\'s file', async ({page}) => {
+    const a = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
+    const b = fakePr(page.github, ++number, [])
+    const held = await gate(page, (u) => u.pathname.endsWith('/contents/a.ts') && u.search.includes(a.head))
+    await page.goto(a.url)
+    await expect(page.locator('#tree .tr-file')).toHaveCount(1)
+    await expect.poll(() => held.seen).toBe(1)
+    await goTo(page, b.url)
+    await expect(page.locator('#view-msg')).toContainText('No changed files')
+    held.release()
+    // the first file's load ends after the switch
+    await page.waitForTimeout(500)
+    await expect(page.locator('#view-msg')).toHaveClass(/\bactive\b/)
+    await expect(page.locator('#view-msg')).toContainText('No changed files')
+    await expect(page.locator('.view-lines', {hasText: 'new a'})).toHaveCount(0)
+})
+
 /** `n` files in `dirs` folders, each a one-line change. */
 const manyFiles = (n, dirs = 30) => Array.from({length: n}, (_, i) => ({filename: `pkg/d${String(i % dirs).padStart(2, '0')}/f${String(i).padStart(4, '0')}.txt`,
     old: 'a\n', new: 'b\n'}))

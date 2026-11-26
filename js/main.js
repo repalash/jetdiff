@@ -548,6 +548,11 @@ async function route(force = false) {
 
 async function openTarget(target, file) {
     const id = ++state.loadId
+    // the change set shown before is gone: a file of it still loading must not show, and no step or mark acts on it
+    state.fileLoadId++
+    state.cs = null
+    state.order = []
+    state.index = -1
     state.target = target
     state.ready = false
     state.offlineCopy = false
@@ -560,6 +565,7 @@ async function openTarget(target, file) {
     buildShell()
     setLoading(true)
     $('#title').textContent = labelForTarget(target)
+    state.tree.clear()
     $('#tree').innerHTML = '<div class="tree-msg dim">Loading changes…</div>'
     showMessage('')
     let cs
