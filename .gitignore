@@ -6,3 +6,4 @@ playwright-report/
 __pycache__/
 dist/
 .wrangler/
+.claude/worktrees/
