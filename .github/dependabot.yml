@@ -9,9 +9,12 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-    # until the port to Monaco 0.57 (branch later/library-upgrades) is merged: its releases need that porting
+    # until the port to Monaco 0.57 and markdown-it 15 (branch later/library-upgrades) is merged: their releases need
+    # that porting (markdown-it 15 renders links differently)
     ignore:
       - dependency-name: monaco-editor
+      - dependency-name: markdown-it
+        update-types: [version-update:semver-major]
     groups:
       libraries:
         dependency-type: production

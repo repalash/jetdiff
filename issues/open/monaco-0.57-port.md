@@ -9,4 +9,4 @@ Done on the branch `later/library-upgrades` (all tests pass there), not merged. 
 - Monaco's unused language workers add about 11 MiB to `dist/`.
 - On a phone (emulated), clicks in the editors log a Clipboard `NotAllowedError`: check on a real iPhone.
 - Go to Declaration and hovers in TypeScript files (see typescript-worker-on-monaco-upgrade.md).
-- Remove the `monaco-editor` ignore from `.github/dependabot.yml`.
+- Remove the `monaco-editor` and markdown-it major ignores from `.github/dependabot.yml`.
