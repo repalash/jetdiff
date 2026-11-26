@@ -120,3 +120,14 @@ test('the start page offers a line for an agent\'s instructions file, and copies
     await expect(page.locator('#toasts')).toContainText('Copied')
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('replaced by `jetdiff.com`')
 })
+
+test('a browser too old for the app is told so instead of a blank page', async ({page, context}) => {
+    const current = await context.newPage()
+    await current.goto('./')
+    await expect(current.locator('#landing')).toBeVisible()
+    await expect(current.locator('#unsupported')).toBeHidden()
+    await page.addInitScript(() => { HTMLScriptElement.supports = () => false })
+    await page.goto('./')
+    await expect(page.locator('#unsupported')).toBeVisible()
+    await expect(page.locator('#unsupported')).toContainText('jetdiff needs a newer browser')
+})

@@ -9,7 +9,8 @@
 jetdiff opens a GitHub pull request, a commit or a compare the way an IDE's diff shows it: a tree of the changed
 files, and whole files side by side with curved connectors between the changes. It is a static web app with no
 server of its own: it talks to the GitHub API from the browser, and loads everything else (its libraries and fonts
-too) from the site itself.
+too) from the site itself. It runs in Chrome or Edge 89, Firefox 108, Safari 16.4 (iOS 16.4) or later; an older browser
+gets a message saying so.
 
 ## Features
 
