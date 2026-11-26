@@ -103,6 +103,9 @@ async function openCache(name) {
 export const STORAGE_FULL = 'jd-storage-full'
 const storageFull = () => window.dispatchEvent(new CustomEvent(STORAGE_FULL))
 
+/** Told when GitHub's hourly limit for requests without a token is used up: detail {resetAt} (ms since the epoch, or 0). */
+export const RATE_LIMITED = 'jd-rate-limited'
+
 /** Keeps `res` (ok) in `cache` under `url`; returns a response with the same body. */
 async function keep(cache, url, res) {
     const buf = await res.arrayBuffer()
@@ -327,6 +330,7 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
         if (limited) {
             message = 'GitHub API rate limit reached' + (token ? '' : '. Add a GitHub token for a higher limit.')
             retryAt = res.headers.get('retry-after') ? Date.now() + 1000 * +res.headers.get('retry-after') : 1000 * +res.headers.get('x-ratelimit-reset')
+            if (!token && res.headers.get('x-ratelimit-remaining') === '0') window.dispatchEvent(new CustomEvent(RATE_LIMITED, {detail: {resetAt: retryAt}}))
         }
         if (res.status === 401) message = 'GitHub refused the token (401). Check or replace it.'
         const app = signedIn() && (res.status === 403 || res.status === 404) && (await authConfig())?.appSlug

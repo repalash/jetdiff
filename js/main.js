@@ -1,6 +1,6 @@
 import {
     accountIdentity, answerSnapshot, authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
-    otherSite, PACK_ANSWER, paramsToTarget, parseTarget, listPullRequests, searchCode, searchMyPullRequests, setFileViewed, setSnapshot, setToken, snapshotInfo, snapshotName, snapshotRepos,
+    otherSite, PACK_ANSWER, paramsToTarget, RATE_LIMITED, parseTarget, listPullRequests, searchCode, searchMyPullRequests, setFileViewed, setSnapshot, setToken, snapshotInfo, snapshotName, snapshotRepos,
     snapshotToAsk, targetToParams,
 } from './github.js'
 import {
@@ -1709,6 +1709,16 @@ async function timelineHtml(cs, {comments, reviews, inline}, desc) {
 window.addEventListener('jd-offline', () => { state.offlineCopy = true; renderOffline() })
 window.addEventListener(PACK_ANSWER, () => { if (!state.packAnswered) { state.packAnswered = true; renderRecordedBar() } })
 
+// GitHub's 60 requests an hour without a token are used up: offer to sign in, at most every two minutes as the requests
+// that follow fail too
+let limitAskedAt = 0
+window.addEventListener(RATE_LIMITED, (e) => {
+    if (getToken() || Date.now() - limitAskedAt < 120e3) return
+    limitAskedAt = Date.now()
+    const until = e.detail.resetAt > Date.now() ? ` until ${new Date(e.detail.resetAt).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}` : ''
+    toast(`GitHub's limit without sign-in, 60 requests an hour, is used up${until}. Signed in, it is 5,000 an hour.`, 'error', 20000, {label: 'Sign In…', run: tokenDialog})
+})
+
 const dateOf = (d) => new Date(d).toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'})
 
 /**
@@ -2681,8 +2691,9 @@ async function declarationsOf(model, position, word, ctx) {
 
 const numbered = (list) => list.map((r, i) => ({...r, i}))
 
-// at most this many versions of the changed files are read for one search (those viewed are loaded already)
-const MAX_SEARCHED = 200
+// at most this many versions of the changed files are read for one search (those viewed are loaded already); without a
+// token GitHub allows 60 requests an hour, so one search takes at most half of them
+const maxSearched = () => getToken() ? 200 : 30
 
 /** `word`'s declarations in the changed files of the language family of `ctx`, both sides. */
 async function searchChanges(word, ctx) {
@@ -2703,7 +2714,7 @@ async function searchChanges(word, ctx) {
         return n
     }
     versions.sort((a, b) => near(b.path) - near(a.path))
-    const found = await mapLimit(versions.slice(0, MAX_SEARCHED), 8, async (v) => {
+    const found = await mapLimit(versions.slice(0, maxSearched()), 8, async (v) => {
         // the open file as shown, with its edits
         const text = v.model && !v.model.isDisposed() ? v.model.getValue() : (await contentOf(v.ref, v.path).catch(() => null))?.text
         return text ? findDeclarations(text, word, languageForPath(v.path)).map((d) => ({path: v.path, side: v.side, ref: v.ref, ...d})) : []

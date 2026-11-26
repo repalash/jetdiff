@@ -1,4 +1,4 @@
-import {test, expect, ready, PR} from './fixture.js'
+import {test, expect, ready, PR, fakePr} from './fixture.js'
 
 const authHeaders = (github) => {
     const seen = new Set()
@@ -98,4 +98,20 @@ test('a pasted token still works, and no sign-in shows where the site has none',
     await page.goto(`./?pr=${PR}`)
     await ready(page)
     expect([...seen]).toEqual(['Bearer ghp_pasted'])
+})
+
+test('when GitHub\'s hourly limit without a token runs out, a toast offers to sign in, once', async ({page}) => {
+    const reset = Math.floor(Date.now() / 1000) + 600
+    // before fakePr's handlers, which answer the files' contents
+    page.github.handle(({path}) => path.includes('/contents/')
+        ? {status: 403, headers: {'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset)}, body: {message: 'API rate limit exceeded'}} : undefined)
+    const {url} = fakePr(page.github, 920, [{filename: 'a.txt', old: 'a\n', new: 'b\n'}, {filename: 'b.txt', old: 'a\n', new: 'b\n'}])
+    await page.goto(url)
+    const ask = page.locator('.toast', {hasText: 'limit without sign-in, 60 requests an hour, is used up until'})
+    await expect(ask).toHaveCount(1)
+    await page.keyboard.press('Alt+ArrowRight')
+    await expect(page.locator('#view-msg')).toContainText('rate limit')
+    await expect(ask).toHaveCount(1)
+    await ask.locator('.toast-action', {hasText: 'Sign In…'}).click()
+    await expect(page.locator('#dialog #tok')).toBeVisible()
 })

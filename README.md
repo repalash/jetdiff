@@ -107,7 +107,8 @@ its instructions file (`CLAUDE.md`, `AGENTS.md`); the start page has it with a C
 
 ### GitHub access
 
-Public repositories work without signing in (GitHub allows 60 requests an hour then). For private repositories, a
+Public repositories work without signing in (GitHub allows 60 requests an hour then; when they run out, a message
+offers to sign in). For private repositories, a
 higher limit and commits, either **Sign in with GitHub** (on jetdiff.com: it sees the repositories where the jetdiff
 app is installed, and its token renews itself), or paste a token in the settings (the gear in the title bar): a fine-grained token with *Contents:
 read* and *Pull requests: read and write* (write is only for Viewed), and *Contents: read and write* to commit edits;
