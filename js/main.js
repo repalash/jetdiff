@@ -1,5 +1,5 @@
 import {
-    authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
+    accountIdentity, authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
     paramsToTarget, parseTarget, listPullRequests, packMemory, searchMyPullRequests, setFileViewed, setToken, snapshotName, snapshotRepos,
     targetToParams,
 } from './github.js'
@@ -565,6 +565,7 @@ function buildShell() {
                     </div>
                     <div class="tree" id="cmt-tree"></div>
                     <div class="cmt-bottom">
+                        <button class="cmt-aside" id="cmt-aside" title="Edits of files that changed on GitHub since: not applied" hidden></button>
                         <div class="cmt-opts">
                             <label class="cmt-amend" title="Replace the last commit of the branch (a force push)"><input type="checkbox" id="cmt-amend"><span>Amend last commit</span></label>
                             <span class="spacer"></span><span class="cmt-count" id="cmt-count"></span>
@@ -654,6 +655,7 @@ function buildShell() {
     $('#cmt-msg').onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); doCommit() } }
     $('#cmt-go').onclick = () => doCommit()
     $('#cmt-options').onclick = () => commitOptionsDialog()
+    $('#cmt-aside').onclick = () => state.target?.type === 'pr' && conflictsDialog(prKey(state.target))
     $('#cmt-who').onclick = () => commitOptionsDialog()
     $('#prl-state').onclick = (e) => openMenu(e.currentTarget, ['open', 'closed', 'merged', 'all'].map((v) => ({
         label: cap(v), checked: state.prlState === v, action: () => { state.prlState = v; loadPrList() },
@@ -1183,7 +1185,8 @@ async function openFileAt(i, push = true, keepScroll = false) {
             + `<span class="sha">${f.status === 'removed' ? 'Deleted' : short(cs.headSha)}</span>`
             + (fullPr(cs) ? '<span class="dim">Head of the pull request</span>' : '')
             + (f.prevPath ? `<span class="path">${esc(f.path)}</span>` : '')
-            + (added ? '<span class="tag tag-add">new file</span>' : ''),
+            + (added ? '<span class="tag tag-add">new file</span>' : '')
+            + (mod.readOnly && canEdit(f) ? `<span class="tag tag-ro" title="An edit would change the rest of the file too">read-only: ${esc(mod.readOnly)}</span>` : ''),
     }
 
     if (orig.binary || mod.binary) {
@@ -1197,7 +1200,8 @@ async function openFileAt(i, push = true, keepScroll = false) {
     const old = state.models
     // a fresh URI per load: the previous models are disposed only after the new ones are shown
     const uri = (side) => monaco.Uri.parse(`jd-${side}://${id}/${f.path.split('/').map(encodeURIComponent).join('/')}`)
-    state.editableFile = canEdit(f)
+    // a file whose text cannot be written back as it was read stays as it is (mod.readOnly says why)
+    state.editableFile = canEdit(f) && !mod.readOnly
     const edited = state.editableFile && state.edits.has(f.path)
     const original = monaco.editor.createModel(orig.text, lang, uri('a'))
     const modified = monaco.editor.createModel(mod.text, lang, uri('b'))
@@ -1872,9 +1876,10 @@ function renderEdits() {
     saveEdits()
 }
 
-// stored per PR with the head they were made on, so they survive a reload or a closed browser: {head, files}, and
+// stored per PR with the head they were made on, so they survive a reload or a closed browser: {head, files},
 // `pending`: [{path, head, text}] edits of another head not carried over to `head` yet (a read failed, or another tab
-// was on that head), tried again on each load
+// was on that head), tried again on each load, and `conflicts`: [{path, head, text}] edits of a file that changed on
+// GitHub since, kept aside (not applied) until the user copies or discards them
 const editStore = () => store.get('edits', {}) || {}
 
 /** Stores `fn(entry)` as the PR's entry, read afresh as another tab may have written it; false when not kept. */
@@ -1882,7 +1887,8 @@ function writeStoredEdits(key, fn) {
     const all = editStore()
     const e = fn(all[key] || {})
     if (!e.pending?.length) delete e.pending
-    const has = Object.keys(e.files || {}).length || e.pending
+    if (!e.conflicts?.length) delete e.conflicts
+    const has = Object.keys(e.files || {}).length || e.pending || e.conflicts
     if (has) all[key] = e
     else delete all[key]
     const ok = store.set('edits', all)
@@ -1921,8 +1927,8 @@ function flushEdits() {
 
 /**
  * The edits of `cs` (path -> text), or null when a newer load started; none off a PR's full changes (they stay stored).
- * An edit made on another head is carried over when its file is the same at both heads, dropped when it changed, and
- * kept as it is when a read fails (tried again on the next load).
+ * An edit made on another head is carried over when its file is the same at both heads, kept aside (`conflicts`) when
+ * it changed, and kept as it is when a read fails (tried again on the next load).
  */
 async function attachEdits(t, cs, id) {
     flushEdits()
@@ -1952,19 +1958,74 @@ async function attachEdits(t, cs, id) {
     const changed = [], replaced = []
     writeStoredEdits(key, (e) => {
         files = e.head === head ? {...e.files} : {}
-        const pending = []
+        const pending = [], conflicts = [...e.conflicts || []]
         for (const h of held(e)) {
             const s = same.get(`${h.head}:${h.path}`)
             if (s === undefined) pending.push(h)
-            else if (!s) changed.push(h.path)
-            else if (!(h.path in files)) files[h.path] = h.text
+            else if (!s) {
+                changed.push(h.path)
+                if (!conflicts.some((c) => c.path === h.path && c.head === h.head && c.text === h.text)) conflicts.push(h)
+            } else if (!(h.path in files)) files[h.path] = h.text
             else if (files[h.path] !== h.text) replaced.push(h.path)
         }
-        return {...e, head, files, pending}
+        return {...e, head, files, pending, conflicts}
     })
-    if (changed.length) toast(`Dropped your edits of ${filesLabel(changed)}: changed on GitHub since`, 'error', 8000)
+    if (changed.length) toast(`Your edits of ${filesLabel(changed)} are kept aside: changed on GitHub since`, 'error', 12000,
+        {label: 'Show', run: () => conflictsDialog(key)})
     if (replaced.length) toast(`Dropped your edits of ${filesLabel(replaced)} made on an older head: edited again since`, 'error', 8000)
     return new Map(Object.entries(files))
+}
+
+/** The edits of the PR `key` kept aside, as their file changed on GitHub since: [{path, head, text}]. */
+const conflictsOf = (key) => editStore()[key]?.conflicts || []
+
+/** Lists the edits kept aside, each with Copy, Download and Discard. */
+function conflictsDialog(key) {
+    const dlg = $('#dialog')
+    const render = () => {
+        const list = conflictsOf(key)
+        if (!list.length) {
+            if (dlg.open) dlg.close()
+            return renderCommitPanel(false)
+        }
+        dlg.innerHTML = `
+            <form class="dlg dlg-wide" method="dialog">
+                <h2>Edits kept aside</h2>
+                <p class="dim">These files changed on GitHub after you edited them, so your edits were not put on the new
+                version. Copy or download your text to make the edit again, or discard it.</p>
+                <div class="off-list">${list.map((c, i) => `
+                    <div class="off-row"><div class="off-name"><b>${esc(c.path)}</b><span class="dim">edited on ${esc(short(c.head))}</span></div>
+                        <button type="button" class="btn btn-small" data-copy="${i}">Copy</button>
+                        <button type="button" class="btn btn-small" data-download="${i}">Download</button>
+                        <button type="button" class="btn btn-small btn-ghost" data-discard="${i}">Discard</button></div>`).join('')}</div>
+                <div class="dlg-actions"><span class="spacer"></span><button type="button" class="btn" id="cf-close">Close</button></div>
+            </form>`
+        $('#cf-close', dlg).onclick = () => dlg.close()
+        const each = (attr, fn) => dlg.querySelectorAll(`[data-${attr}]`).forEach((b) => b.onclick = () => fn(list[+b.dataset[attr]]))
+        each('copy', async (c) => {
+            try {
+                await navigator.clipboard.writeText(c.text)
+                toast(`Copied your edit of ${baseName(c.path)}`)
+            } catch (e) {
+                toast(`Could not copy: ${e.message}`, 'error')
+            }
+        })
+        each('download', (c) => {
+            const a = document.createElement('a')
+            a.href = URL.createObjectURL(new Blob([c.text], {type: 'text/plain'}))
+            a.download = baseName(c.path)
+            a.click()
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+        })
+        each('discard', (c) => {
+            if (!confirm(`Discard your edit of ${c.path}?`)) return
+            writeStoredEdits(key, (e) => ({...e, conflicts: (e.conflicts || []).filter((x) => !(x.path === c.path && x.head === c.head && x.text === c.text))}))
+            render()
+        })
+    }
+    render()
+    if (conflictsOf(key).length && !dlg.open) dlg.showModal()
+    renderCommitPanel(false)
 }
 
 // another tab of this PR wrote its edits: its changes are taken where this tab has none of its own
@@ -2058,13 +2119,20 @@ function renderCommitPanel(tree = true) {
         }
     }
     const amend = $('#cmt-amend').checked
+    const aside = state.target?.type === 'pr' ? conflictsOf(prKey(state.target)).length : 0
+    $('#cmt-aside').hidden = !aside
+    $('#cmt-aside').textContent = `${plural(aside, 'edit')} kept aside`
     $('#cmt-count').textContent = files.length ? `${included.length} modified` : ''
     const pr = state.cs?.pr
     $('#cmt-to').innerHTML = pr ? `to ${icons.branch}<span>${esc(pr.head.ref)}</span>` : ''
     const id = identity()
-    $('#cmt-who').innerHTML = id.author
-        ? `Author: <b>${esc(id.author.name)}</b> &lt;${esc(id.author.email)}&gt;${id.committer ? ` · committer: <b>${esc(id.committer.name)}</b>` : ''}`
-        : `Author: <b>your GitHub account</b>${amend ? ' (Amend keeps the commit\'s author)' : ''}`
+    // an amend keeps the commit's author and date, as git does; the committer is who amends
+    const committer = id.committer || id.author
+    $('#cmt-who').innerHTML = amend
+        ? `Author: <b>the commit's own</b> (Amend keeps it) · committer: <b>${committer ? esc(committer.name) : 'your GitHub account'}</b>`
+        : id.author
+            ? `Author: <b>${esc(id.author.name)}</b> &lt;${esc(id.author.email)}&gt;${id.committer ? ` · committer: <b>${esc(id.committer.name)}</b>` : ''}`
+            : 'Author: <b>your GitHub account</b>'
     const msg = $('#cmt-msg').value.trim()
     // an amend with no files can still change the message
     const headMsg = headCommitMessage()
@@ -2087,7 +2155,8 @@ function commitOptionsDialog() {
         <form class="dlg" method="dialog">
             <h2>Commit Options</h2>
             <p class="dim">Who the commits made here are by. Left empty, GitHub uses the account of your token.
-            GitHub links a commit to a profile by its email.</p>
+            GitHub links a commit to a profile by its email. Amend keeps the amended commit's author and date; its
+            committer is the one given here (else the author, else your account).</p>
             <label class="dlg-label">Author</label>
             <div class="dlg-row"><input id="co-an" placeholder="Name" value="${v(id.author, 'name')}" autocomplete="name"><input id="co-ae" placeholder="Email" value="${v(id.author, 'email')}" autocomplete="email" type="email"></div>
             <label class="cmt-amend"><input type="checkbox" id="co-same" ${id.committer ? '' : 'checked'}><span>Committer is the author</span></label>
@@ -2112,10 +2181,9 @@ function commitOptionsDialog() {
     }
     field('me').onclick = async () => {
         try {
-            const me = await getViewer()
-            field('an').value = me.name || me.login
-            // a private email: GitHub's noreply address still links the commit to the profile
-            field('ae').value = me.email || `${me.id}+${me.login}@users.noreply.github.com`
+            const me = await accountIdentity()
+            field('an').value = me.name
+            field('ae').value = me.email
         } catch (e) {
             showError(field('err'), getToken() ? e.message : 'Add a GitHub token first')
         }
@@ -2156,6 +2224,12 @@ async function doCommit() {
     $('#cmt-err').hidden = true
     renderCommitPanel(false)
     try {
+        // an edit stored before its file was known to be read-only (another version of the app, another tab)
+        const t = state.target
+        for (const path of paths) {
+            const c = await getFileContent(t.owner, t.repo, state.editHead, path)
+            if (c.readOnly) throw new GitHubError(`${path} is read-only here (${c.readOnly}): a commit would change the rest of the file. Roll its edit back or uncheck it.`, 422)
+        }
         const id = identity()
         const {sha, previous} = await commitFiles({...where, expectedHead: state.editHead, message, amend, author: id.author, committer: id.committer,
             files: paths.map((path) => ({path, text: state.edits.get(path)}))})

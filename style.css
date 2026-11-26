@@ -190,6 +190,7 @@ body.side-hidden .side, body.side-hidden .splitter { display: none; }
 .sbs-head .ic, .uni-head .ic { width: 13px; height: 13px; }
 .tag { font-size: 10.5px; padding: 0 6px; border-radius: 8px; }
 .tag-add { background: #2a3d22; color: var(--added); }
+.tag-ro { background: var(--accent-bg); color: var(--accent); white-space: nowrap; }
 .sbs-body { display: flex; flex: 1; min-height: 0; border-top: 1px solid var(--border); }
 .sbs-ed { flex: 1; min-width: 0; position: relative; }
 /* a whole-pixel width: Monaco lays out in whole pixels, and a fractional editor edge leaves a hairline gap in the bands */
@@ -679,5 +680,7 @@ dialog:has(.dlg-wide) { width: min(560px, calc(100vw - 24px)); max-width: none; 
 .off-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 .land h3 .ic { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
 .land-snap { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 14px; margin: 18px 0 6px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-bg); }
+.cmt-aside { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
+.cmt-aside:hover { text-decoration: underline; }
 .land-snap .ic { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; }
 .land h3 .dim { font-weight: 400; }

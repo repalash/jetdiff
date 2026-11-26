@@ -12,3 +12,7 @@ Smallest option: decode with `{fatal: true}`; a file that fails, or has mixed li
 reason next to the head's label (for example a tag "read-only: not UTF-8").
 Alternatives: keep them editable and warn in the Commit panel before committing; or write back the original bytes of
 the lines not edited (a line-level merge with the raw text), which keeps them editable.
+
+Done (the smallest option): `getFileContent` decodes with `{fatal: true}` and marks a file that fails, or has both CRLF
+and LF lines, `readOnly`; it opens read-only with "read-only: not UTF-8" or "read-only: mixed line endings" on the
+head's label, and Commit refuses an edit of such a file stored before.

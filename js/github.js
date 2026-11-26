@@ -497,7 +497,13 @@ export function forgetLoaded(owner, repo) {
     for (const k of filesCache.keys()) if (files(k)) filesCache.delete(k)
 }
 
-/** The content of `path` at `ref`: `{text, size}` or `{binary: true, size, blob}`. */
+/** Why a text can not be written back as it was read, else null: Monaco evens out mixed line endings. */
+const mixedLineEndings = (text) => text.includes('\r\n') && /(^|[^\r])\n/.test(text)
+
+/**
+ * The content of `path` at `ref`: `{text, size, readOnly?}` or `{binary: true, size, blob}`. `readOnly`: why an edit
+ * could not keep the rest of the file as it is ('not UTF-8', 'mixed line endings').
+ */
 export function getFileContent(owner, repo, ref, path, {signal} = {}) {
     const url = `${API}/repos/${owner}/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`
     return memo(contentCache, url, async () => {
@@ -507,7 +513,16 @@ export function getFileContent(owner, repo, ref, path, {signal} = {}) {
         const bytes = new Uint8Array(await res.arrayBuffer())
         if (looksBinary(bytes)) return {binary: true, size: bytes.length, blob: new Blob([bytes])}
         // a BOM stays in the text (Monaco keeps it aside), so a commit writes it back
-        return {text: new TextDecoder('utf-8', {ignoreBOM: true}).decode(bytes), size: bytes.length}
+        let text, readOnly = null
+        try {
+            text = new TextDecoder('utf-8', {ignoreBOM: true, fatal: true}).decode(bytes)
+        } catch {
+            // shown with U+FFFD for what cannot be read; written back, those bytes would change
+            text = new TextDecoder('utf-8', {ignoreBOM: true}).decode(bytes)
+            readOnly = 'not UTF-8'
+        }
+        readOnly ??= mixedLineEndings(text) ? 'mixed line endings' : null
+        return {text, size: bytes.length, ...readOnly && {readOnly}}
     })
 }
 
@@ -541,6 +556,12 @@ export async function listPullRequests(owner, repo, {state = 'open', text = '', 
 
 export async function getViewer() {
     return json('/user')
+}
+
+/** {name, email} of the token's account; a private email is GitHub's noreply address, which still links to the profile. */
+export async function accountIdentity() {
+    const me = await getViewer()
+    return {name: me.name || me.login, email: me.email || `${me.id}+${me.login}@users.noreply.github.com`}
 }
 
 async function graphql(query, variables) {
@@ -617,7 +638,11 @@ async function headEntries(R, head, rootTree, files) {
     })
 }
 
-/** Commits `files` ([{path, text}]) on `branch` at `expectedHead`, or with `amend` replaces that commit. {sha, previous}. */
+/**
+ * Commits `files` ([{path, text}]) on `branch` at `expectedHead`, or with `amend` replaces that commit. {sha, previous}.
+ * An amend keeps the commit's author and date, as `git commit --amend` does; its committer is `committer`, else
+ * `author`, else the token's account.
+ */
 export async function commitFiles({owner, repo, branch, expectedHead, files, message, amend = false, author = null, committer = null}) {
     canWrite()
     const R = `/repos/${owner}/${repo}/git`
@@ -632,11 +657,11 @@ export async function commitFiles({owner, repo, branch, expectedHead, files, mes
             tree: files.map((f, i) => ({path: f.path, mode: entries[i].mode, type: 'blob', content: f.text})),
         }})).sha
     }
-    // without an author or committer GitHub uses the token's account; an amend keeps the commit's author
+    // without an author or committer GitHub uses the token's account; with an author only, the author is the committer
+    // too: an amend names its committer, or the original author would be
     const body = amend
-        ? {message, tree: treeSha, parents: headCommit.parents.map((p) => p.sha), author: author || headCommit.author}
-        : {message, tree: treeSha, parents: [head], ...(author && {author})}
-    if (committer) body.committer = committer
+        ? {message, tree: treeSha, parents: headCommit.parents.map((p) => p.sha), author: headCommit.author, committer: committer || author || await accountIdentity()}
+        : {message, tree: treeSha, parents: [head], ...(author && {author}), ...(committer && {committer})}
     const commit = await json(`${R}/commits`, {method: 'POST', body})
     // a forced update cannot be made conditional here (issues/open/atomic-force-updates.md): checked again just before
     if (amend) await leasedHead(owner, repo, branch, head)

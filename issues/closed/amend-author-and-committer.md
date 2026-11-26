@@ -13,3 +13,7 @@ Smallest option: Amend always keeps the original author with its date; the commi
 the saved author, else the token's account (from `/user`, with the noreply email when the email is private).
 Alternatives: the same, plus a "Reset the author" checkbox shown only with Amend; or only fix the committer and keep
 the saved author replacing the original one, as now.
+
+Done (the smallest option): Amend keeps the original author with its date; the committer is the saved committer, else
+the saved author, else the token's account (`accountIdentity`, the noreply email when the email is private), in
+`commitFiles`. The Commit panel and Commit Options say so.

@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import {test, expect, ready, recorded, FIXTURE_DIR, PR, HEAD} from './fixture.js'
+import {test, expect, ready, recorded, fakePr, FIXTURE_DIR, PR, HEAD} from './fixture.js'
 
 test.use({token: true})
 
@@ -10,6 +10,7 @@ const NEW = 'c0ffee'.padEnd(40, '0')
 const OLD = 'beef'.padEnd(40, '0')
 const KEY = 'repalash/threepipe#193'
 const pr = recorded(`${R}/pulls/193`)
+const AUTHOR = {name: 'Original Author', email: 'original@example.com', date: '2026-01-01T00:00:00Z'}
 
 /**
  * The PR's branch on GitHub, at `ref`. `prHead`, when set, is the PR's head as GitHub shows it: it follows a push a
@@ -22,7 +23,7 @@ function branch(github) {
     github.handle(({method, path, body}) => {
         if (path === `${R}/pulls/193`) return {...pr, state: 'open', head: {...pr.head, sha: b.prHead ?? b.ref}}
         if (method === 'GET' && path.includes('/git/ref/')) return {object: {sha: b.ref}}
-        if (method === 'GET' && path.includes('/git/commits/')) return {sha: b.ref, message: b.message, tree: {sha: 'tree0'}, parents: [{sha: 'parent0'}]}
+        if (method === 'GET' && path.includes('/git/commits/')) return {sha: b.ref, message: b.message, author: AUTHOR, tree: {sha: 'tree0'}, parents: [{sha: 'parent0'}]}
         if (method === 'GET' && path.includes('/git/trees/')) return {tree: [{path: 'CloudAuth.ts', mode: b.mode, type: b.type}]}
         if (method === 'POST' && path.endsWith('/git/trees')) return {sha: 'tree1'}
         if (method === 'POST' && path.endsWith('/git/commits')) return {sha: NEW}
@@ -156,26 +157,18 @@ test('two tabs of a pull request keep each other\'s edits', async ({page, contex
     await other.close()
 })
 
-test('a commit keeps the file\'s BOM, and typing back a file with mixed line endings leaves no edit', async ({page}) => {
+test('a commit keeps the file\'s BOM, and typing an edit back leaves no edit', async ({page}) => {
     const {github} = page
     branch(github)
-    const text = (f) => fs.readFileSync(new URL(JSON.parse(fs.readFileSync(new URL('index.json', FIXTURE_DIR)))[`${R}/contents/${f}?ref=${HEAD}`].file, FIXTURE_DIR), 'utf8')
-    const bodies = {[FILE]: '﻿' + text(FILE), [FILE2]: text(FILE2).split('\n').map((l, i) => i % 2 ? l + '\r' : l).join('\n')}
+    const text = fs.readFileSync(new URL(JSON.parse(fs.readFileSync(new URL('index.json', FIXTURE_DIR)))[`${R}/contents/${FILE}?ref=${HEAD}`].file, FIXTURE_DIR), 'utf8')
     await page.route(`**/contents/**ref=${HEAD}`, (route) => {
-        const f = Object.keys(bodies).find((p) => route.request().url().includes(p))
-        if (!f || route.request().method() === 'OPTIONS') return route.fallback()
-        route.fulfill({headers: {'access-control-allow-origin': '*'}, body: Buffer.from(bodies[f])})
+        if (!route.request().url().includes(FILE) || route.request().method() === 'OPTIONS') return route.fallback()
+        route.fulfill({headers: {'access-control-allow-origin': '*'}, body: Buffer.from('﻿' + text)})
     })
-    await page.goto(`./?pr=${PR}&file=${FILE2}`)
-    await ready(page)
-    await edit(page, 'x')
-    await expect(page.locator('#btn-commit')).toBeVisible()
-    await page.keyboard.press('Backspace')
-    await expect(page.locator('#btn-commit')).toBeHidden()
-
     await page.goto(`./?pr=${PR}&file=${FILE}`)
     await ready(page)
     await edit(page, 'x')
+    await expect(page.locator('#btn-commit')).toBeVisible()
     await page.keyboard.press('Backspace')
     await expect(page.locator('#btn-commit')).toBeHidden()
     await page.keyboard.type(' // edited')
@@ -184,6 +177,73 @@ test('a commit keeps the file\'s BOM, and typing back a file with mixed line end
     const content = posts(github)[0].body.tree[0].content
     expect(content.startsWith('﻿')).toBe(true)
     expect(content).toContain('// edited')
+})
+
+test('a file that is not UTF-8 or has mixed line endings opens read-only, and Commit leaves it as it is', async ({page}) => {
+    const {github} = page
+    const pr = fakePr(github, 9010, [
+        {filename: 'latin1.txt', old: 'cafe\n', new: Buffer.from('caf\xe9\n', 'latin1')},
+        {filename: 'mixed.txt', old: 'a\nb\n', new: 'a\r\nb\nc\n'},
+        {filename: 'plain.txt', old: 'a\n', new: 'b\n'},
+    ])
+    // an edit stored before the file was known to be read-only
+    await seedOnce(page, seed('jd.edits', {'repalash/threepipe#9010': {head: pr.head, files: {'latin1.txt': 'café\n'}}}))
+    for (const [file, why] of [['latin1.txt', 'not UTF-8'], ['mixed.txt', 'mixed line endings']]) {
+        await page.goto(`${pr.url}&file=${file}`)
+        await ready(page)
+        await expect(page.locator('.sbs-head-right .tag-ro')).toHaveText(`read-only: ${why}`)
+        await expect(page.locator('#btn-edit')).toBeHidden()
+    }
+    await page.goto(`${pr.url}&file=plain.txt`)
+    await ready(page)
+    await expect(page.locator('#btn-edit')).toBeVisible()
+    await commit(page)
+    await expect(page.locator('#cmt-err')).toContainText('latin1.txt is read-only here (not UTF-8)')
+    expect(posts(github)).toEqual([])
+})
+
+test('Amend keeps the commit\'s author and date; its committer is the saved one, else the token\'s account', async ({page}) => {
+    const {github} = page
+    const b = branch(github)
+    github.handle(({method, path}) => method === 'GET' && path === '/user' && {login: 'me', id: 7, name: null, email: null})
+    await page.goto('./')
+    const amend = (author) => page.evaluate(([author, head]) => import('/js/github.js').then((m) => m.commitFiles({
+        owner: 'repalash', repo: 'threepipe', branch: 'b', expectedHead: head, files: [], message: 'm', amend: true, author})), [author, b.ref])
+    const saved = {name: 'Saved', email: 'saved@example.com'}
+    await amend(saved)
+    await amend(null)
+    expect(posts(github).filter((w) => w.path.endsWith('/git/commits')).map((w) => [w.body.author, w.body.committer])).toEqual([
+        [AUTHOR, saved],
+        [AUTHOR, {name: 'me', email: '7+me@users.noreply.github.com'}],
+    ])
+})
+
+test('an edit of a file that changed on GitHub since is kept aside, to copy, download or discard', async ({page}) => {
+    const {github} = page
+    branch(github)
+    github.handle(({method, path}) => method === 'GET' && path.includes('/contents/') && path.endsWith(`ref=${OLD}`) && {raw: 'the file before\n'})
+    await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {value: {writeText: async (t) => { window.copied = t }}}))
+    await seedOnce(page, seed('jd.edits', {[KEY]: {head: OLD, files: {[FILE]: 'my edit\n'}}}))
+    await page.goto(`./?pr=${PR}&file=${FILE}`)
+    await ready(page)
+    await expect(page.locator('#tree .tr-file.edited')).toHaveCount(0)
+    expect(await storedEdits(page)).toEqual({head: HEAD, files: {}, conflicts: [{path: FILE, head: OLD, text: 'my edit\n'}]})
+    await page.locator('.toast-action', {hasText: 'Show'}).click()
+    const row = page.locator('#dialog .off-row', {hasText: FILE})
+    await row.locator('[data-copy]').click()
+    await expect.poll(() => page.evaluate(() => window.copied)).toBe('my edit\n')
+    const download = page.waitForEvent('download')
+    await row.locator('[data-download]').click()
+    expect((await download).suggestedFilename()).toBe('CloudAuth.ts')
+    expect(fs.readFileSync(await (await download).path(), 'utf8')).toBe('my edit\n')
+    await page.locator('#cf-close').click()
+    await page.locator('#strip-commit').click()
+    await page.locator('#cmt-aside', {hasText: '1 edit kept aside'}).click()
+    page.once('dialog', (d) => d.accept())
+    await row.locator('[data-discard]').click()
+    await expect(page.locator('#dialog')).toBeHidden()
+    await expect(page.locator('#cmt-aside')).toBeHidden()
+    expect(await storedEdits(page)).toBeUndefined()
 })
 
 test('a push whose answer is lost is seen as made', async ({page}) => {

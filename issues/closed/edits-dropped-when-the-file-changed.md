@@ -13,3 +13,7 @@ and Discard.
 Alternatives: keep it as the edit of the new head and show the diff against the new head, so the user resolves it in
 the editor (a commit would revert the upstream change unless they do); or offer a three-way merge with the upstream
 change.
+
+Done (the smallest option): such an edit moves to the PR entry's `conflicts` list in `jd.edits` ([{path, head, text}]);
+the toast names the files with a "Show" action, and the dialog (also from "N edits kept aside" in the Commit panel)
+offers Copy, Download and Discard for each (`conflictsDialog` in js/main.js).
