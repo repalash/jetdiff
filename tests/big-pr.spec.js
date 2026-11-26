@@ -34,3 +34,45 @@ for (const view of ['sbs', 'unified']) {
         expect(await liveModels(page) - start).toBeLessThan(6)
     })
 }
+
+/** `n` files in `dirs` folders, each a one-line change. */
+const manyFiles = (n, dirs = 30) => Array.from({length: n}, (_, i) => ({filename: `pkg/d${String(i % dirs).padStart(2, '0')}/f${String(i).padStart(4, '0')}.txt`,
+    old: 'a\n', new: 'b\n'}))
+
+/** Counts the nodes the tree removes while `fn` runs: none when it updates its rows in place. */
+async function treeNodesRemoved(page, fn) {
+    await page.evaluate(() => {
+        window.jdRemoved = 0
+        window.jdTreeObserver = new MutationObserver((ms) => { for (const m of ms) window.jdRemoved += m.removedNodes.length })
+        window.jdTreeObserver.observe(document.querySelector('#tree'), {childList: true, subtree: true})
+    })
+    await fn()
+    return page.evaluate(() => { window.jdTreeObserver.disconnect(); return window.jdRemoved })
+}
+
+test('a step to the next file or a Viewed mark updates the rows it changes, not the whole tree', async ({page}) => {
+    test.setTimeout(120000)
+    const pr = fakePr(page.github, ++number, manyFiles(3000))
+    await page.goto(pr.url)
+    await ready(page)
+    await expect(page.locator('#tree .tr-file')).toHaveCount(3000)
+    const first = await page.locator('#tree .tr-file.sel').getAttribute('data-file')
+    const removed = await treeNodesRemoved(page, async () => {
+        await page.locator('#btn-next-file').click()
+        await ready(page)
+        await expect(page.locator('#tree .tr-file.sel')).not.toHaveAttribute('data-file', first)
+        await page.keyboard.press('v')
+        await expect(page.locator('#tree .tr-file.sel')).toHaveClass(/\bviewed\b/)
+        await expect(page.locator('#viewed-count')).toHaveText('1 / 3000 viewed')
+    })
+    await expect(page.locator('#tree .tr-file.sel')).toHaveCount(1)
+    await expect(page.locator(`#tree .tr-file[data-file="${first}"]`)).not.toHaveClass(/\bsel\b/)
+    // the Viewed box of the file marked, at most
+    expect(removed).toBeLessThan(5)
+    // a file in a collapsed folder still shows once selected
+    await page.locator('#btn-collapse').click()
+    await expect(page.locator('#tree .tr-file')).toHaveCount(0)
+    await page.locator('#btn-next-file').click()
+    await ready(page)
+    await expect(page.locator('#tree .tr-file.sel')).toBeVisible()
+})

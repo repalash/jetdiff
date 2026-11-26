@@ -64,6 +64,8 @@ export class FileTree {
         this.collapsed = new Set()
         this.selected = null
         this.viewed = new Set()
+        this.files = new Map() // path -> file
+        this.rows = new Map() // path -> its row, for the files shown
         const isDouble = doubleClicks()
         el.addEventListener('click', (e) => {
             const row = e.target.closest('.tr')
@@ -87,6 +89,7 @@ export class FileTree {
     setFiles(files) {
         this.root = buildTree(files)
         this.order = flattenTree(this.root)
+        this.files = new Map(this.order.map((f) => [f.path, f]))
         this.render()
     }
 
@@ -94,26 +97,52 @@ export class FileTree {
     clear() {
         this.root = null
         this.order = []
+        this.rows = new Map()
     }
 
     setEdited(paths) {
+        const before = this.edited
         this.edited = new Set(paths)
-        this.render()
+        this._update(before, this.edited)
     }
 
+    /** `viewed` is copied: the owner may change its set and pass it again. */
     setViewed(viewed) {
-        this.viewed = viewed
-        this.render()
+        const before = this.viewed
+        this.viewed = new Set(viewed)
+        this._update(before, this.viewed)
     }
 
     select(path) {
+        const before = this.selected
         this.selected = path
+        let opened = false
         for (const key of [...this.collapsed]) {
             const dir = key.split('|')[0]
-            if (key === ROOT_KEY || path.startsWith(dir + '/')) this.collapsed.delete(key)
+            if (key === ROOT_KEY || path?.startsWith(dir + '/')) {
+                this.collapsed.delete(key)
+                opened = true
+            }
         }
-        this.render()
-        this.el.querySelector('.tr.sel')?.scrollIntoView({block: 'nearest'})
+        // a folder opened for it: its rows are new
+        if (opened) this.render()
+        else this._update(new Set([before]), new Set([path]))
+        this.rows?.get(path)?.scrollIntoView({block: 'nearest'})
+    }
+
+    /** Draws again the rows of the files in one of the two sets and not the other (a selection, a mark). */
+    _update(a, b) {
+        if (!this.root) return
+        for (const p of new Set([...a, ...b])) {
+            if (a.has(p) === b.has(p)) continue
+            const row = this.rows.get(p)
+            if (!row) continue
+            const t = document.createElement('template')
+            t.innerHTML = this._fileRow(this.files.get(p), row.style.getPropertyValue('--d'))
+            const fresh = t.content.firstElementChild
+            row.replaceWith(fresh)
+            this.rows.set(p, fresh)
+        }
     }
 
     collapseAll(collapse) {
@@ -125,6 +154,19 @@ export class FileTree {
         this.render()
     }
 
+    _fileRow(f, depth) {
+        const viewed = this.viewed.has(f.path)
+        const title = `${STATUS_LABEL[f.status] || f.status}: ${f.prevPath ? f.prevPath + ' → ' : ''}${f.path}  (+${f.additions ?? '?'} −${f.deletions ?? '?'})`
+        const slot = !this.onToggleViewed ? ''
+            : this.checks ? `<span class="tvd tck" title="${viewed ? 'Included in the commit' : 'Not included'}"><i class="tvd-box">${viewed ? icons.check : ''}</i></span>`
+                : `<span class="tvd" title="${viewed ? 'Viewed: click to unmark' : 'Mark as viewed'}"><i class="tvd-dot"></i><i class="tvd-box">${viewed ? icons.check : ''}</i></span>`
+        const edited = this.edited.has(f.path)
+        return `<div class="tr tr-file st-${esc(f.status)}${f.path === this.selected ? ' sel' : ''}${viewed ? ' viewed' : ''}${edited ? ' edited' : ''}" data-file="${esc(f.path)}" style="--d:${depth}" title="${esc(title)}${edited ? ' · edited here, not committed' : ''}">
+                    <span class="tw"></span>${this.checks ? slot : ''}${fileIcon(f.path)}<span class="tn">${esc(baseName(f.path))}</span>${edited ? '<span class="ted" title="Edited here, not committed"></span>' : ''}${this.checks ? '' : slot}
+                </div>`
+    }
+
+    /** Draws the whole tree: for new files or folders opened or closed (a selection or a mark changes its rows only). */
     render() {
         if (!this.root) return
         const rows = []
@@ -141,21 +183,12 @@ export class FileTree {
                 rows.push(dirRow(d.name, key, depth, d.count, open))
                 if (open) walk(d, depth + 1)
             }
-            for (const f of node.files) {
-                const viewed = this.viewed.has(f.path)
-                const title = `${STATUS_LABEL[f.status] || f.status}: ${f.prevPath ? f.prevPath + ' → ' : ''}${f.path}  (+${f.additions ?? '?'} −${f.deletions ?? '?'})`
-                const slot = !this.onToggleViewed ? ''
-                    : this.checks ? `<span class="tvd tck" title="${viewed ? 'Included in the commit' : 'Not included'}"><i class="tvd-box">${viewed ? icons.check : ''}</i></span>`
-                        : `<span class="tvd" title="${viewed ? 'Viewed: click to unmark' : 'Mark as viewed'}"><i class="tvd-dot"></i><i class="tvd-box">${viewed ? icons.check : ''}</i></span>`
-                const edited = this.edited.has(f.path)
-                rows.push(`<div class="tr tr-file st-${esc(f.status)}${f.path === this.selected ? ' sel' : ''}${viewed ? ' viewed' : ''}${edited ? ' edited' : ''}" data-file="${esc(f.path)}" style="--d:${depth}" title="${esc(title)}${edited ? ' · edited here, not committed' : ''}">
-                    <span class="tw"></span>${this.checks ? slot : ''}${fileIcon(f.path)}<span class="tn">${esc(baseName(f.path))}</span>${edited ? '<span class="ted" title="Edited here, not committed"></span>' : ''}${this.checks ? '' : slot}
-                </div>`)
-            }
+            for (const f of node.files) rows.push(this._fileRow(f, depth))
         }
         const rootOpen = !this.collapsed.has(ROOT_KEY)
         rows.push(dirRow(this.rootLabel, ROOT_KEY, 0, this.root.count, rootOpen))
         if (rootOpen) walk(this.root, 1)
         this.el.innerHTML = rows.join('')
+        this.rows = new Map([...this.el.querySelectorAll('.tr-file')].map((r) => [r.dataset.file, r]))
     }
 }

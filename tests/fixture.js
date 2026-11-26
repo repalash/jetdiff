@@ -64,6 +64,13 @@ export const test = base.extend({
 export const fakeSha = (n) => n.toString(16).padStart(8, '0').padEnd(40, 'e')
 const segments = (path) => path.split('/').map(encodeURIComponent).join('/')
 
+/** The page of `list` that a request's `per_page` and `page` ask for, as GitHub gives it. */
+export function pageOf(path, list) {
+    const q = new URLSearchParams(path.split('?')[1])
+    const size = +q.get('per_page') || 30, n = +q.get('page') || 1
+    return list.slice((n - 1) * size, n * size)
+}
+
 /**
  * A made-up pull request `number` of repalash/threepipe, answered by `github.handle`. `files`: [{filename, status?,
  * previous_filename?, old?, new?}], `old` and `new` the text at the base and at the head. `pr` overrides the PR's fields.
@@ -79,7 +86,7 @@ export function fakePr(github, number, files, pr = {}) {
             head: {...tpl.head, sha: head}, base: {...tpl.base, sha: base}, ...pr}
         if (path.startsWith(`${R}/pulls/${number}/commits?`)) return [{sha: head, parents: [{sha: base}], author: null, html_url: `https://github.com${R}/commit/${head}`,
             commit: {message: 'Change', author: {name: 'A', date: '2026-01-01T00:00:00Z'}, committer: {name: 'A', date: '2026-01-01T00:00:00Z'}}}]
-        if (path.startsWith(`${R}/pulls/${number}/files?`)) return files.map((f) => ({status: 'modified', additions: 1, deletions: 1, sha: fakeSha(1), ...f, old: undefined, new: undefined}))
+        if (path.startsWith(`${R}/pulls/${number}/files?`)) return pageOf(path, files).map((f) => ({status: 'modified', additions: 1, deletions: 1, sha: fakeSha(1), ...f, old: undefined, new: undefined}))
         if (path === `${R}/compare/${base}...${head}?per_page=1`) return {merge_base_commit: {sha: base}, base_commit: {sha: base}}
         for (const f of files) {
             if (path === `${R}/contents/${segments(f.previous_filename || f.filename)}?ref=${base}`) return {raw: f.old ?? ''}
