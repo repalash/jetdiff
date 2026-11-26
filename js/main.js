@@ -1471,13 +1471,13 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
         if (preview) {
             const changes = await fileChanges(f, original, modified, stale)
             if (id !== state.fileLoadId) return
-            state.unified?.setModel(null)
+            if (state.unified) setDiffModels(state.unified, null)
             if (!await showMarkdownPreview(f, original.getValue(), modified.getValue(), changes, labels, id, keepScroll, land)) return
         } else if (renderer() === 'sbs') {
             const changes = await fileChanges(f, original, modified, stale)
             if (id !== state.fileLoadId) return
             showView('sbs')
-            state.unified?.setModel(null)
+            if (state.unified) setDiffModels(state.unified, null)
             const sc = keepScroll && state.sbs ? state.sbs.right.getScrollTop() : 0
             ensureSbs().setModels(original, modified, changes, labels)
             if (changes.length && !keepScroll) state.sbs.goTo(land < 0 ? changes.length - 1 : 0, land !== 0 && stepFocusQuery.matches)
@@ -1491,7 +1491,7 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
             de.updateOptions(monacoOptions())
             state.uniOrigin.from = 'scroll'
             const updated = waitForDiff(de)
-            de.setModel({original, modified})
+            setDiffModels(de, {original, modified})
             if (!await updated) throw new DiffTooLarge()
             if (id !== state.fileLoadId) return
             const n = de.getLineChanges()?.length
@@ -2658,6 +2658,21 @@ function waitForDiff(de) {
     })
 }
 
+const viewModels = new WeakMap() // diff editor -> the view model it shows
+
+/**
+ * Shows a pair of models in a diff editor (null for none) through a view model of ours, disposed when the next pair
+ * shows: Monaco 0.52's setModel({original, modified}) never disposes the view model it makes, which keeps every pair of
+ * models shown, their tokens and its listeners.
+ */
+function setDiffModels(de, models) {
+    const old = viewModels.get(de)
+    const vm = models && de.createViewModel(models)
+    de.setModel(vm)
+    vm ? viewModels.set(de, vm) : viewModels.delete(de)
+    old?.dispose()
+}
+
 // one diff at a time: the hidden diff editor holds one pair of models
 let diffQueue = Promise.resolve()
 
@@ -2689,10 +2704,10 @@ async function diffNow(original, modified) {
         b = strip(modified)
     }
     const updated = waitForDiff(de)
-    de.setModel({original: a, modified: b})
+    setDiffModels(de, {original: a, modified: b})
     const ok = await updated
     const changes = ok ? de.getLineChanges() || [] : null
-    de.setModel(null) // models are disposed when the next file opens; a diff editor must not hold them then
+    setDiffModels(de, null) // models are disposed when the next file opens; a diff editor must not hold them then
     if (a !== original) {
         a.dispose()
         b.dispose()
@@ -3063,7 +3078,12 @@ function showView(which) {
 
 const isShown = (view) => $('#view-' + view).classList.contains('active')
 
-function showMessage(html) {
+// the object URLs of the images the message view shows: revoked when it shows something else
+let messageUrls = []
+
+function showMessage(html, urls = []) {
+    for (const u of messageUrls) URL.revokeObjectURL(u)
+    messageUrls = urls
     $('#view-msg').innerHTML = html ? `<div class="msg">${html}</div>` : ''
     if (html) showView('msg')
     updateToolbar()
@@ -3073,10 +3093,12 @@ function showBinary(f, orig, mod) {
     const {cs} = state
     const size = (c) => (c?.size != null ? `${(c.size / 1024).toFixed(1)} KB` : '')
     if (isImagePath(f.path)) {
+        const urls = []
+        const src = (blob) => { urls.push(URL.createObjectURL(blob)); return urls.at(-1) }
         const img = (c, label) => c?.blob
-            ? `<figure><figcaption>${label} <span class="dim">${size(c)}</span></figcaption><div class="img-box"><img src="${URL.createObjectURL(c.blob)}" alt=""></div></figure>`
+            ? `<figure><figcaption>${label} <span class="dim">${size(c)}</span></figcaption><div class="img-box"><img src="${src(c.blob)}" alt=""></div></figure>`
             : `<figure><figcaption>${label}</figcaption><div class="img-box empty dim">none</div></figure>`
-        showMessage(`<div class="img-diff">${img(orig.binary ? orig : null, short(cs.baseSha) || '∅')}${img(mod.binary ? mod : null, short(cs.headSha))}</div>`)
+        showMessage(`<div class="img-diff">${img(orig.binary ? orig : null, short(cs.baseSha) || '∅')}${img(mod.binary ? mod : null, short(cs.headSha))}</div>`, urls)
     } else {
         showMessage(`Binary file<div class="dim small">${size(orig) || '∅'} → ${size(mod) || '∅'}</div>`)
     }
