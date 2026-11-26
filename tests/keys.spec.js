@@ -54,8 +54,37 @@ test('the JetBrains keys edit in the editable side; the VS Code keymap gives Mon
     expect(await page.evaluate(() => localStorage.getItem('jd.keymap'))).toBe('"vscode"')
 })
 
+/** Opens a made-up pull request of two files in edit mode, the caret in the first file's editable side. */
+async function twoFiles(page) {
+    const {url} = fakePr(page.github, ++number, [{filename: 'a.txt', old: 'one two\n', new: 'one two three\n'}, {filename: 'b.txt', old: 'x\n', new: 'y\n'}])
+    await page.goto(`${url}&file=a.txt`)
+    await ready(page)
+    await page.locator('#btn-edit').click()
+    await page.locator('.sbs-right .view-line').first().click()
+    await page.keyboard.press('Home')
+}
+const openFile = (page) => page.locator('#tree .tr-file.sel')
+
+test('IntelliJ\'s Compare Next/Previous File keys step files, while editing too', async ({page}) => {
+    await twoFiles(page)
+    await page.keyboard.press('Alt+Shift+ArrowRight')
+    await expect(openFile(page)).toHaveAttribute('data-file', 'b.txt')
+    await page.locator('.sbs-right .view-line').first().click()
+    await page.keyboard.press('Alt+ArrowLeft')
+    await expect(openFile(page)).toHaveAttribute('data-file', 'a.txt')
+})
+
 test.describe('on a Mac', () => {
     test.use({userAgent: MAC})
+    test('⌃⇧→ steps files and ⌥→ moves by word', async ({page}) => {
+        await twoFiles(page)
+        await page.keyboard.press('Alt+ArrowRight')
+        expect(await page.evaluate(() => window.monaco.editor.getEditors().find((e) => e.hasTextFocus()).getPosition().column)).toBe(4)
+        await expect(openFile(page)).toHaveAttribute('data-file', 'a.txt')
+        await page.keyboard.press('Control+Shift+ArrowRight')
+        await expect(openFile(page)).toHaveAttribute('data-file', 'b.txt')
+        await expect(page.locator('#btn-next-file')).toHaveAttribute('title', 'Next File (⌃⇧→)')
+    })
     test('the macOS keys of the JetBrains keymap', async ({page}) => {
         const path = 'src/list.txt'
         await editing(page, path, 'one\ntwo\nthree\n', 2)

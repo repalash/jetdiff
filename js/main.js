@@ -16,7 +16,7 @@ import {installTooltips} from './tooltip.js'
 import {onAppUpdate} from './update.js'
 import {appOffline, clearOffline, downloadRepo, hasSavedData, importPack, offlineRepos, removeRepo, storageUse} from './offline.js'
 import {highlightBlocks, renderMarkdown, repoResolvers, richSource, sanitize} from './markdown.js'
-import {BACK, DECLARATION, DEFAULT_KEYMAP, FORWARD, KEYMAPS, registerAppCommands, setKeymap, shortcut} from './keymap.js'
+import {BACK, DECLARATION, DEFAULT_KEYMAP, FORWARD, keyLabel, KEYMAPS, MAC, registerAppCommands, setKeymap, shortcut} from './keymap.js'
 import {attachGoTo, chooseDeclaration, choosing, nameAt} from './goto.js'
 import {familyOf, findDeclarations} from './declarations.js'
 import {addRoot, dropRoot, registerHover, TS_LANGUAGES, tsDefinitions} from './typescript.js'
@@ -37,6 +37,11 @@ const commitDate = (c) => c.commit.author?.date || c.commit.committer?.date
 const selectedCommit = (t) => t.commit || (t.type === 'commit' ? t.sha : null)
 const FONT = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
 const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
+// Previous and Next File: IntelliJ's Compare Previous/Next File, ⌃⇧←/→ on a Mac and Alt+Shift+←/→ elsewhere, where Alt+←/→
+// (its Previous/Next Tab) step files too; ⌥←/→ moves by word on a Mac
+const FILE_KEYS = MAC ? [keyLabel('ctrl+shift+left'), keyLabel('ctrl+shift+right')] : [keyLabel('alt+shift+left'), keyLabel('alt+shift+right')]
+const isFileKey = (e) => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.metaKey
+    && (MAC ? e.ctrlKey && e.shiftKey && !e.altKey : e.altKey && !e.ctrlKey)
 
 // everything works without storage (private windows, sandboxed pages)
 const store = {
@@ -703,9 +708,9 @@ function buildShell() {
                     <button class="tb-btn" id="btn-prev-diff" title="Previous Difference (Shift+F7)">${icons.up}</button>
                     <button class="tb-btn" id="btn-next-diff" title="Next Difference (F7)">${icons.down}</button>
                     <button class="tb-btn hide-mobile" id="btn-open-file" title="Open the file on GitHub: the new or the old version, or its diff">${icons.external}</button>
-                    <button class="tb-btn" id="btn-prev-file" title="Previous File (Alt+←)">${icons.left}</button>
+                    <button class="tb-btn" id="btn-prev-file" title="Previous File (${FILE_KEYS[0]})">${icons.left}</button>
                     <span class="file-pos" id="file-pos"></span>
-                    <button class="tb-btn" id="btn-next-file" title="Next File (Alt+→)">${icons.right}</button>
+                    <button class="tb-btn" id="btn-next-file" title="Next File (${FILE_KEYS[1]})">${icons.right}</button>
                     <span class="spacer"></span>
                     <button class="btn btn-primary btn-commit" id="btn-commit" title="Commit the edits to the pull request's branch" hidden>${icons.commit}<span></span></button>
                     <button class="tb-btn" id="btn-edit" title="Edit the pull request's files (then commit to its branch)" hidden>${icons.pencil}</button>
@@ -1051,7 +1056,7 @@ function appMenu(anchor) {
         OPEN_ANOTHER_ITEM,
         {label: `${icons.download} Offline: Download and Saved Data…`, action: offlineDialog},
         '-',
-        {label: `Double Shift: Search Everywhere · F7 / ⇧F7: differences · Alt+→ / Alt+←: files · V: viewed · ${shortcut(settings.keymap, DECLARATION)}, ${MOD}click: declaration`, disabled: true},
+        {label: `Double Shift: Search Everywhere · F7 / ⇧F7: differences · ${FILE_KEYS[1]} / ${FILE_KEYS[0]}: files · V: viewed · ${shortcut(settings.keymap, DECLARATION)}, ${MOD}click: declaration`, disabled: true},
     ], {align: 'right'})
 }
 
@@ -2991,12 +2996,12 @@ function onKey(e) {
         e.preventDefault()
         return changeFont(e.key === '0' ? 0 : (e.key === '=' || e.key === '+' || e.code === 'Period') ? 1 : -1)
     }
-    // typing in the editable head: only F7 / Shift+F7 stay shortcuts
-    if (e.key !== 'F7' && state.editing && state.editableFile && e.target.closest?.('.sbs-right, .editor.modified')) return
+    // typing in the editable head: only F7 / Shift+F7 and the file keys stay shortcuts
+    if (e.key !== 'F7' && !isFileKey(e) && state.editing && state.editableFile && e.target.closest?.('.sbs-right, .editor.modified')) return
     if (e.key === 'F7') {
         e.preventDefault()
         stepDiff(e.shiftKey ? -1 : 1)
-    } else if (e.altKey && !mod && !e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+    } else if (isFileKey(e)) {
         e.preventDefault()
         stepFile(e.key === 'ArrowRight' ? 1 : -1)
     } else if (k === 'v' && !mod && !e.altKey) {
@@ -3020,8 +3025,8 @@ function actionItems() {
     return [
         A('Next Difference', () => stepDiff(1), {hint: 'F7', ic: icons.down}),
         A('Previous Difference', () => stepDiff(-1), {hint: '⇧F7', ic: icons.up}),
-        A('Next File', () => stepFile(1), {hint: 'Alt+→', ic: icons.right}),
-        A('Previous File', () => stepFile(-1), {hint: 'Alt+←', ic: icons.left}),
+        A('Next File', () => stepFile(1), {hint: FILE_KEYS[1], ic: icons.right}),
+        A('Previous File', () => stepFile(-1), {hint: FILE_KEYS[0], ic: icons.left}),
         f && A(state.viewed.has(f.path) ? 'Unmark File as Viewed' : 'Mark File as Viewed', () => toggleViewed(f, !state.viewed.has(f.path)), {hint: 'V', ic: icons.check}),
         A('Side-by-Side Viewer', () => setView('sbs'), {toggle: viewMode() === 'sbs', ic: icons.sideBySide}),
         A('Unified Viewer', () => setView('unified'), {toggle: viewMode() === 'unified', ic: icons.unified}),

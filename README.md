@@ -58,7 +58,8 @@ short, and when the merge base could not be read (the diff is then against the b
 
 ### Keys
 
-F7 and Shift+F7 move between differences, Alt+→ and Alt+← between files, V marks a file viewed, double Shift opens
+F7 and Shift+F7 move between differences, ⌃⇧→ and ⌃⇧← between files on a Mac (Alt+Shift+→ and Alt+Shift+←, or
+Alt+→ and Alt+←, elsewhere, as in IntelliJ), V marks a file viewed, double Shift opens
 Search Everywhere (⌘/Ctrl+Shift+A its actions, ⌘/Ctrl+P its files), and ⌘/Ctrl with + − 0 sizes the editor font.
 
 The editors follow IntelliJ's keymap: its macOS keys on a Mac, its Windows/Linux keys elsewhere (the settings, the gear

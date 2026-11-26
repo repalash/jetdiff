@@ -81,13 +81,21 @@ const JETBRAINS_REMOVED = [
     ['editor.action.outdentLines', 'cmd+[', null],
     ['editor.action.indentLines', 'cmd+]', null],
     ['editor.action.quickCommand', 'f1', null],
+    // Alt+Shift+←/→ step files (main.js), as IntelliJ's Compare Previous/Next File
+    ['editor.action.smartSelect.shrink', null, 'shift+alt+left'],
+    ['editor.action.smartSelect.expand', null, 'shift+alt+right'],
 ]
 
 const VSCODE = [
     // Monaco's F12 needs a definition provider, which jetdiff's languages have not
     [DECLARATION, 'f12', 'f12'],
 ]
-const VSCODE_REMOVED = [['editor.action.revealDefinition', 'f12', 'f12']]
+const VSCODE_REMOVED = [
+    ['editor.action.revealDefinition', 'f12', 'f12'],
+    // the app's file keys in either keymap (main.js)
+    ['editor.action.smartSelect.shrink', null, 'shift+alt+left'],
+    ['editor.action.smartSelect.expand', null, 'shift+alt+right'],
+]
 
 const KEYS = {jetbrains: [JETBRAINS, JETBRAINS_REMOVED], vscode: [VSCODE, VSCODE_REMOVED]}
 
