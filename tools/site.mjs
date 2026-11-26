@@ -204,12 +204,20 @@ export function serviceWorker() {
         .replace(/^const LIB_FILES = .*$/m, `const LIB_FILES = ${list(libs)}`)
 }
 
-// npm run vendor
+// npm run vendor; with --check, only says whether it is due (CI)
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-    const file = path.join(ROOT, 'index.html')
-    const html = currentIndex(fs.readFileSync(file, 'utf8'))
-    fs.writeFileSync(file, html)
-    const headers = fs.readFileSync(HEADERS_MODULE, 'utf8')
-    fs.writeFileSync(HEADERS_MODULE, headers.replace(/(export const IMPORT_MAP_HASH = ')[^']*(')/, `$1${scriptHash(html.match(IMPORT_MAP)[2])}$2`))
-    console.log(`index.html and worker/headers.js name ${[...packages.values()].map((p) => `${p.name}@${p.version}`).join(', ')}`)
+    if (process.argv[2] === '--check') {
+        const stale = await checkVendor()
+        if (stale) {
+            console.error(stale)
+            process.exit(1)
+        }
+    } else {
+        const file = path.join(ROOT, 'index.html')
+        const html = currentIndex(fs.readFileSync(file, 'utf8'))
+        fs.writeFileSync(file, html)
+        const headers = fs.readFileSync(HEADERS_MODULE, 'utf8')
+        fs.writeFileSync(HEADERS_MODULE, headers.replace(/(export const IMPORT_MAP_HASH = ')[^']*(')/, `$1${scriptHash(html.match(IMPORT_MAP)[2])}$2`))
+        console.log(`index.html and worker/headers.js name ${[...packages.values()].map((p) => `${p.name}@${p.version}`).join(', ')}`)
+    }
 }

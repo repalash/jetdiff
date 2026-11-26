@@ -131,8 +131,9 @@ worker keeps the release it installed, so with `npm start` a change shows after 
 in (or with *Update on reload* in the browser's developer tools). After changing a library's version, run
 `npm run vendor`: it writes the versions into `index.html` (the import map and the font stylesheets) and the import
 map's hash into the Content Security Policy (`worker/headers.js`); the dev server and the build refuse to start until
-they match `node_modules`. `js/themes.js` is generated from
-[Material Theme UI Lite](https://github.com/AtomMaterialUI/material-theme-ui-lite):
+they match `node_modules`. Dependabot proposes updates weekly, of releases at least a week old
+(`.github/dependabot.yml`), and `.github/workflows/vendor.yml` runs `npm run vendor` on its pull requests.
+`js/themes.js` is generated from [Material Theme UI Lite](https://github.com/AtomMaterialUI/material-theme-ui-lite):
 
 ```sh
 git clone --depth 1 https://github.com/AtomMaterialUI/material-theme-ui-lite /tmp/mtui

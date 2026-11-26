@@ -1,0 +1,29 @@
+# Weekly updates, of releases at least 7 days old. The libraries' minor and patch releases come in one pull request;
+# a major release, and any Monaco release (its 0.x minor releases break, like majors), each in its own.
+# .github/workflows/vendor.yml runs `npm run vendor` on these pull requests.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      libraries:
+        dependency-type: production
+        update-types: [minor, patch]
+        exclude-patterns: [monaco-editor]
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        update-types: [minor, patch]

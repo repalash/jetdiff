@@ -35,6 +35,7 @@ they are, and the build only copies them, with the libraries from `node_modules`
 | `tools/` | also the dev server, the build, the snapshot recorder, the pack maker, the theme generator |
 | `tests/` | Playwright tests; `tests/fixture/` is a recorded pull request (repalash/threepipe#193) |
 | `docs/` | the README screenshots |
+| `.github/` | CI (tests, then deploy from `main`), Dependabot's weekly updates, and `vendor.yml`, which runs `npm run vendor` on Dependabot's pull requests |
 | `issues/open`, `issues/closed` | the backlog: one file per issue |
 
 ## Commands
@@ -44,7 +45,7 @@ they are, and the build only copies them, with the libraries from `node_modules`
 | `npm start` | dev server on port 3000 (the libraries from `node_modules`, as the build serves them) |
 | `npm test` | the Playwright tests (must pass before a commit) |
 | `npm run build` | copy the served files and the libraries into `dist/` (fails past the Worker's limits) |
-| `npm run vendor` | after changing a library's version: write the versions into `index.html` and the import map's hash into `worker/headers.js` |
+| `npm run vendor` | after changing a library's version: write the versions into `index.html` and the import map's hash into `worker/headers.js` (`npm run vendor -- --check` only checks, as CI does) |
 | `npm run deploy` | build and deploy the Worker (wrangler, needs Cloudflare access) |
 | `npm run record -- <page url> <owner/repo/number> [name]` | record a snapshot into `snap/` |
 | `npm run pack -- snap/<name> <out dir>` | make offline packs from a snapshot |
