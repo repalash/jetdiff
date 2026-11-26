@@ -4,6 +4,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {checkVendor, FILES, ROOT as root, serviceWorker, vendor} from './site.mjs'
+import {headersFile} from '../worker/headers.js'
 
 // Cloudflare's limits for a Worker's static assets
 const MAX_FILES = 20000
@@ -18,6 +19,7 @@ const out = path.join(root, 'dist')
 fs.rmSync(out, {recursive: true, force: true})
 for (const f of FILES) fs.cpSync(path.join(root, f), path.join(out, f), {recursive: true})
 fs.writeFileSync(path.join(out, 'sw.js'), serviceWorker())
+fs.writeFileSync(path.join(out, '_headers'), headersFile())
 for (const [to, from] of vendor().files) {
     fs.mkdirSync(path.dirname(path.join(out, to)), {recursive: true})
     fs.copyFileSync(from, path.join(out, to))
