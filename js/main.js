@@ -241,8 +241,8 @@ const landItem = (href, label, title) => `
 const TITLE = 'jetdiff · Code changes in an IDE-style side-by-side diff'
 const REPO_URL = 'https://github.com/repalash/jetdiff'
 // for the agent's instructions file (CLAUDE.md, AGENTS.md): links it writes open here too
-const AGENT_LINE = 'When you link a GitHub pull request, commit or compare, also give the jetdiff link to it: the same URL with ' +
-    '`github.com` replaced by `jetdiff.com` (for example https://jetdiff.com/owner/repo/pull/123), which opens it in an IDE-style diff.'
+const AGENT_LINE = 'When it helps the reader, link GitHub pull requests, commits and compares through jetdiff instead: the same URL ' +
+    'with `github.com` replaced by `jetdiff.com` (for example https://jetdiff.com/owner/repo/pull/123), which opens it in an IDE-style diff.'
 const EXAMPLES = [
     ['repalash/threepipe/203', 'TypeScript, GLSL'],
     ['microsoft/vscode/350405', 'TypeScript, a big repository'],

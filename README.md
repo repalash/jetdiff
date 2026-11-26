@@ -57,10 +57,10 @@ opens Search Everywhere, and Ctrl/⌘ with + − 0 sizes the editor font.
 
 ### Links from AI agents
 
-To have an agent (Claude Code, Codex and others) give jetdiff links next to the GitHub links it writes, add this line
-to its instructions file (`CLAUDE.md`, `AGENTS.md`); the start page has it with a Copy button:
+To let an agent (Claude Code, Codex and others) link pull requests through jetdiff where that helps, add this line to
+its instructions file (`CLAUDE.md`, `AGENTS.md`); the start page has it with a Copy button:
 
-> When you link a GitHub pull request, commit or compare, also give the jetdiff link to it: the same URL with
+> When it helps the reader, link GitHub pull requests, commits and compares through jetdiff instead: the same URL with
 > `github.com` replaced by `jetdiff.com` (for example https://jetdiff.com/owner/repo/pull/123), which opens it in an
 > IDE-style diff.
 
