@@ -13,6 +13,7 @@ import {fileIcon, icons, isImagePath} from './icons.js'
 import {formatWhen, LogView} from './log.js'
 import {onDoubleShift, Palette} from './palette.js'
 import {installTooltips} from './tooltip.js'
+import {onAppUpdate} from './update.js'
 import {appOffline, clearOffline, downloadRepo, hasSavedData, importPack, offlineRepos, removeRepo, storageUse} from './offline.js'
 import {highlightBlocks, renderMarkdown, repoResolvers, richSource, sanitize} from './markdown.js'
 import {baseName, esc, firstLine, githubUrl, plural, shortSha as short} from './util.js'
@@ -1703,7 +1704,7 @@ function renderRecordedBar() {
     const key = `${snap}|${from}`
     if (bar.dataset.key === key) return
     bar.dataset.key = key
-    bar.innerHTML = `${icons.download}<span class="rec-text">Recorded data from <b>${esc(from)}</b><span class="rec-date"></span></span>
+    bar.innerHTML = `${icons.download}<span class="rec-text">${snap ? 'Recorded data' : 'Saved copy'} from <b>${esc(from)}</b><span class="rec-date"></span></span>
         ${snap ? '<button class="rec-exit" id="rec-exit" title="Leave the recorded data: show live GitHub">Exit</button>' : ''}`
     if (snap) {
         $('#rec-exit', bar).onclick = exitSnapshot
@@ -1902,7 +1903,7 @@ async function loadPacksFrom(folder) {
     }
 }
 
-/** Imports offline packs (`from`: the host they came from, else each file's name); true when they are kept on this device. */
+/** Imports offline packs (`from`: the host they came from; none for packs picked or dropped by hand); true when they are kept on this device. */
 async function loadPacks(files, from = '') {
     files = files.filter((f) => /\.zip$/i.test(f.name || '') || (f.type || '').includes('zip'))
     if (!files.length) return false
@@ -1911,7 +1912,7 @@ async function loadPacks(files, from = '') {
         let persisted = true
         const prsOf = new Map()
         for (const f of files) {
-            const r = await importPack(f, (step, i, n) => { t.textContent = `${f.name}: ${step}${n > 1 ? ` ${i} / ${n}` : '…'}` }, {from: from || f.name || ''})
+            const r = await importPack(f, (step, i, n) => { t.textContent = `${f.name}: ${step}${n > 1 ? ` ${i} / ${n}` : '…'}` }, {from})
             for (const x of r.repos) prsOf.set(x.repo, x.prs.length)
             persisted &&= r.persisted
         }
@@ -2107,13 +2108,17 @@ async function attachEdits(t, cs, id) {
                 changed.push(h.path)
                 if (!conflicts.some((c) => c.path === h.path && c.head === h.head && c.text === h.text)) conflicts.push(h)
             } else if (!(h.path in files)) files[h.path] = h.text
-            else if (files[h.path] !== h.text) replaced.push(h.path)
+            else if (files[h.path] !== h.text) {
+                replaced.push(h.path)
+                if (!conflicts.some((c) => c.path === h.path && c.head === h.head && c.text === h.text)) conflicts.push(h)
+            }
         }
         return {...e, head, files, pending, conflicts}
     })
     if (changed.length) toast(`Your edits of ${filesLabel(changed)} are kept aside: changed on GitHub since`, 'error', 12000,
         {label: 'Show', run: () => conflictsDialog(key)})
-    if (replaced.length) toast(`Dropped your edits of ${filesLabel(replaced)} made on an older head: edited again since`, 'error', 8000)
+    if (replaced.length) toast(`Your older edits of ${filesLabel(replaced)} are kept aside: edited again since`, 'error', 12000,
+        {label: 'Show', run: () => conflictsDialog(key)})
     return new Map(Object.entries(files))
 }
 
@@ -2365,12 +2370,6 @@ async function doCommit() {
     $('#cmt-err').hidden = true
     renderCommitPanel(false)
     try {
-        // an edit stored before its file was known to be read-only (another version of the app, another tab)
-        const t = state.target
-        for (const path of paths) {
-            const c = await getFileContent(t.owner, t.repo, state.editHead, path)
-            if (c.readOnly) throw new GitHubError(`${path} is read-only here (${c.readOnly}): a commit would change the rest of the file. Roll its edit back or uncheck it.`, 422)
-        }
         const id = identity()
         const {sha, previous} = await commitFiles({...where, expectedHead: state.editHead, message, amend, author: id.author, committer: id.committer,
             files: paths.map((path) => ({path, text: state.edits.get(path)}))})
@@ -2791,5 +2790,6 @@ installTooltips()
 // a sandboxed page has no service worker: even reading navigator.serviceWorker throws there
 try { navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('No offline app', e)) } catch { /* no offline app here */ }
 window.addEventListener('popstate', () => route())
+onAppUpdate(() => toast('jetdiff updated', 'info', 24 * 3600e3, {label: 'Reload', run: () => location.reload()}))
 if (takeSignInToken()) getViewer().then((me) => toast(`Signed in to GitHub as ${me.login}`)).catch(() => {})
 route()

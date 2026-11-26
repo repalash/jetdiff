@@ -132,22 +132,7 @@ test('imported packs leave the app live online, and answer for GitHub when it ca
     await ready(page)
     await expect(page.locator('.sbs-right .view-lines')).toBeVisible()
     await expect(page.locator('#offline-pill')).toBeVisible()
-    await expect(page.locator('#rec-bar')).toHaveText('Recorded data from repalash-threepipe.zip')
-})
-
-test('an install that imported packs before keeps them, as an offline fallback only', async ({page}) => {
-    await page.goto('./')
-    await importPack(page, fixturePack())
-    // the setting an earlier version kept for imported packs
-    await page.evaluate(() => localStorage.setItem('jd.snap', 'pack'))
-    const other = fakePr(page.github, 9021, [{filename: 'a.txt', old: 'a\n', new: 'b\n'}])
-    await page.goto(other.url)
-    await ready(page)
-    expect(await page.evaluate(() => localStorage.getItem('jd.snap'))).toBeNull()
-    await noGitHub(page)
-    await page.goto(`./?pr=${PR}&file=${FILE}`)
-    await ready(page)
-    await expect(page.locator('.sbs-right .view-lines')).toBeVisible()
+    await expect(page.locator('#rec-bar')).toHaveText('Saved copy from an offline pack')
 })
 
 test('importing a pack asks to keep the storage', async ({page}) => {

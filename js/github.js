@@ -155,23 +155,19 @@ let askSnap = ''
 
 // `?snap=` is a name (snap/<name>/ next to the page) or an https URL of a snapshot folder. Kept in localStorage, as an
 // installed app starts at ./ with no ?snap=; where a sandboxed page has no storage, in window.name, which lasts while
-// the tab navigates. `pack` was the imported offline packs: they are an offline fallback now (fromPack), so an install
-// that has it set drops it, and keeps the packs.
+// the tab navigates.
 let SNAP = (() => {
     let s = new URLSearchParams(location.search).get('snap')
-    if (s === 'pack') s = null
     const wait = (kept) => {
         if (!s || s === kept || !otherSite(s)) return false
         askSnap = s
         return true
     }
     try {
-        if (localStorage.getItem(SNAP_KEY) === 'pack') localStorage.removeItem(SNAP_KEY)
         if (wait(localStorage.getItem(SNAP_KEY) || '')) s = null
         if (s !== null) s ? localStorage.setItem(SNAP_KEY, s) : localStorage.removeItem(SNAP_KEY)
         return localStorage.getItem(SNAP_KEY) || ''
     } catch { /* no storage (a sandboxed page): window.name keeps it instead; elsewhere any site could set it */ }
-    if (window.name === SNAP_NAME + 'pack') window.name = ''
     if (wait(window.name.startsWith(SNAP_NAME) ? window.name.slice(SNAP_NAME.length) : '')) s = null
     if (s !== null) window.name = s ? SNAP_NAME + s : ''
     return s || (window.name.startsWith(SNAP_NAME) ? window.name.slice(SNAP_NAME.length) : '')

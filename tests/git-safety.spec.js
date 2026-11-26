@@ -179,15 +179,13 @@ test('a commit keeps the file\'s BOM, and typing an edit back leaves no edit', a
     expect(content).toContain('// edited')
 })
 
-test('a file that is not UTF-8 or has mixed line endings opens read-only, and Commit leaves it as it is', async ({page}) => {
+test('a file that is not UTF-8 or has mixed line endings opens read-only; other files stay editable', async ({page}) => {
     const {github} = page
     const pr = fakePr(github, 9010, [
         {filename: 'latin1.txt', old: 'cafe\n', new: Buffer.from('caf\xe9\n', 'latin1')},
         {filename: 'mixed.txt', old: 'a\nb\n', new: 'a\r\nb\nc\n'},
         {filename: 'plain.txt', old: 'a\n', new: 'b\n'},
     ])
-    // an edit stored before the file was known to be read-only
-    await seedOnce(page, seed('jd.edits', {'repalash/threepipe#9010': {head: pr.head, files: {'latin1.txt': 'café\n'}}}))
     for (const [file, why] of [['latin1.txt', 'not UTF-8'], ['mixed.txt', 'mixed line endings']]) {
         await page.goto(`${pr.url}&file=${file}`)
         await ready(page)
@@ -197,9 +195,6 @@ test('a file that is not UTF-8 or has mixed line endings opens read-only, and Co
     await page.goto(`${pr.url}&file=plain.txt`)
     await ready(page)
     await expect(page.locator('#btn-edit')).toBeVisible()
-    await commit(page)
-    await expect(page.locator('#cmt-err')).toContainText('latin1.txt is read-only here (not UTF-8)')
-    expect(posts(github)).toEqual([])
 })
 
 test('Amend keeps the commit\'s author and date; its committer is the saved one, else the token\'s account', async ({page}) => {
@@ -244,6 +239,15 @@ test('an edit of a file that changed on GitHub since is kept aside, to copy, dow
     await expect(page.locator('#dialog')).toBeHidden()
     await expect(page.locator('#cmt-aside')).toBeHidden()
     expect(await storedEdits(page)).toBeUndefined()
+})
+
+test('an older edit replaced by a newer edit of the same file is kept aside, not dropped', async ({page}) => {
+    page.github.alias[OLD] = HEAD
+    await seedOnce(page, seed('jd.edits', {[KEY]: {head: HEAD, files: {[FILE]: 'newer\n'}, pending: [{path: FILE, head: OLD, text: 'older\n'}]}}))
+    await page.goto(`./?pr=${PR}&file=${FILE}`)
+    await ready(page)
+    expect(await storedEdits(page)).toMatchObject({head: HEAD, files: {[FILE]: 'newer\n'}, conflicts: [{path: FILE, head: OLD, text: 'older\n'}]})
+    await expect(page.locator('#toasts')).toContainText('older edits of')
 })
 
 test('a push whose answer is lost is seen as made', async ({page}) => {

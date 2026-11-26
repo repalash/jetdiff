@@ -55,8 +55,8 @@ they are, and the build only copies them, with the libraries from `node_modules`
 - Find the source of a problem and fix it there; no workarounds stacked on workarounds.
 - Read how the app already does something before adding to it, and follow that pattern.
 - Comments explain a non-obvious why, briefly; no comments that restate the code.
-- Ask before changing what is stored (storage keys, cache names, the snapshot and pack formats): saved data and
-  existing packs must keep working.
+- Ask before changing what is stored (storage keys, cache names, the snapshot and pack formats). jetdiff has no users
+  yet: no migrations, fallbacks or compatibility code for older data or versions; ask if one seems needed.
 - Verify before claiming something works: run it, and add a test when a behaviour is worth keeping.
 - Every bug or idea found and not fixed goes into `issues/open` as its own file.
 - Keep the README and the issue files true when the code changes.

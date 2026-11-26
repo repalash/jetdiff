@@ -48,7 +48,7 @@ async function pool(tasks, n, onDone, signal) {
 // what the page loads on demand: Monaco, the grammars, both themes, Markdown, the fonts
 async function preloadApp(languages) {
     const monaco = await loadMonaco()
-    await Promise.all([preloadForOffline(monaco, languages), loadMarkdown(), cacheFonts()])
+    await Promise.all([preloadForOffline(monaco, languages), loadMarkdown()])
 }
 
 const keepStorage = async () => {
@@ -265,15 +265,4 @@ export async function importPack(file, onProgress = () => {}, {from = file.name 
     const list = offlineRepos().filter((r) => !isNew(r))
     saveRepos([...repos.map((r) => ({...r, commits: true, at: Date.now(), pack: true, from})), ...list])
     return {repos, files: files.length, persisted}
-}
-
-// the service worker keeps what the page fetched: the web fonts' stylesheet and their files
-async function cacheFonts() {
-    for (const link of document.querySelectorAll('link[rel="stylesheet"][href^="https://fonts.googleapis.com"]')) {
-        try {
-            const css = await (await fetch(link.href)).text()
-            const urls = [...css.matchAll(/url\((https:[^)]+)\)/g)].map((m) => m[1])
-            await Promise.all(urls.map((u) => fetch(u, {mode: 'cors'}).catch(() => {})))
-        } catch { /* offline: later */ }
-    }
 }

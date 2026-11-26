@@ -18,8 +18,6 @@ const API = 'jd-api'
 const KEEP = [LIBS, API, 'jd-contents-v1', 'jd-pack', 'jd-snap']
 // avatars never change at a URL either
 const LIB_HOSTS = new Set(['avatars.githubusercontent.com'])
-// where the libraries came from before the site served them
-const OLD_LIB_HOSTS = new Set(['cdn.jsdelivr.net', 'esm.sh', 'fonts.googleapis.com', 'fonts.gstatic.com'])
 const OFFLINE_HEADERS = {'x-jd-offline': '1', 'access-control-expose-headers': 'x-jd-offline'}
 
 const scoped = (f) => new URL(f, self.registration.scope).href
@@ -48,13 +46,6 @@ async function install() {
 self.addEventListener('activate', (e) => {
     e.waitUntil((async () => {
         for (const k of await caches.keys()) if (k.startsWith('jd-') && !k.startsWith(SHELL) && !KEEP.includes(k)) await caches.delete(k)
-        // the libraries from before they came from the site, and opaque avatars kept by earlier versions (~7 MB of
-        // quota each; replaced as they are used)
-        const libs = await caches.open(LIBS)
-        for (const req of await libs.keys()) {
-            const host = new URL(req.url).host
-            if (OLD_LIB_HOSTS.has(host) || LIB_HOSTS.has(host) && (await libs.match(req))?.type === 'opaque') await libs.delete(req)
-        }
         // a page loaded before a worker controlled it has the release just installed (or one no longer known)
         const current = await caches.open(CURRENT)
         for (const c of await self.clients.matchAll({includeUncontrolled: true})) {
@@ -171,13 +162,12 @@ function stripQuery(req) {
 }
 
 // An opaque answer (a script, stylesheet or image asked for without CORS) costs ~7 MB of quota whatever its size, so it
-// is never kept: avatars allow CORS, and the worker asks with it. A copy kept opaque by an earlier version is replaced
-// while online.
+// is never kept: avatars allow CORS, and the worker asks with it.
 async function lib(e) {
     const req = e.request
     const cache = await caches.open(LIBS)
     const hit = await cache.match(req)
-    if (hit && hit.type !== 'opaque') return hit
+    if (hit) return hit
     let res
     try {
         res = await fetch(req.mode === 'no-cors' ? new Request(req.url, {mode: 'cors', credentials: 'omit'}) : req)
