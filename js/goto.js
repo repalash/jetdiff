@@ -18,8 +18,13 @@ export function nameAt(ed, position) {
 export function attachGoTo(monaco, ed, go) {
     const deco = ed.createDecorationsCollection()
     let last = null // the last mouse move over the text: {position, held}
+    let shown = '' // the underlined name's line:column, '' for none
     const show = () => {
         const w = last?.held && nameAt(ed, last.position)
+        const at = w ? `${last.position.lineNumber}:${w.startColumn}` : ''
+        // a decoration change re-renders the line, and Monaco drops a mousedown that comes before that render
+        if (at === shown) return
+        shown = at
         deco.set(w ? [{range: new monaco.Range(last.position.lineNumber, w.startColumn, last.position.lineNumber, w.endColumn), options: {inlineClassName: 'jd-goto'}}] : [])
         ed.getDomNode()?.classList.toggle('jd-goto-on', !!w)
     }
@@ -30,8 +35,11 @@ export function attachGoTo(monaco, ed, go) {
         show()
     })
     ed.onMouseLeave(() => { last = null; show() })
-    ed.onKeyDown((e) => { if (last && (MAC ? e.browserEvent.key === 'Meta' : e.browserEvent.key === 'Control')) { last.held = true; show() } })
-    ed.onKeyUp((e) => { if (last && (e.browserEvent.key === 'Meta' || e.browserEvent.key === 'Control')) { last.held = false; show() } })
+    // on the window: the editor under the mouse need not have the focus
+    const key = (e) => { if (last && (e.key === 'Meta' || e.key === 'Control')) { last.held = e.type === 'keydown' && held(e); show() } }
+    addEventListener('keydown', key, true)
+    addEventListener('keyup', key, true)
+    addEventListener('blur', () => { if (last) { last.held = false; show() } })
     ed.onMouseDown((e) => { down = e.event.leftButton && held(e.event) && text(e) && nameAt(ed, e.target.position) ? e.target.position : null })
     ed.onMouseUp((e) => {
         const at = down
