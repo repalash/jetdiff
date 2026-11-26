@@ -213,3 +213,14 @@ test('Open on GitHub keeps a path with # % and ? whole', async ({page}) => {
     await page.locator('.menu-item', {hasText: 'Open New Version'}).click()
     expect(await page.evaluate(() => window.opened)).toBe(`https://github.com/repalash/threepipe/blob/${pr.head}/src/100%25/a%23b%3F.ts`)
 })
+
+test('a Markdown change fills its lines, and an inline code span changed whole is highlighted itself', async ({page}) => {
+    const pr = fakePr(page.github, 9051, [{filename: 'docs/a.md', old: 'Cancelling shows no error.\n', new: 'Cancelling shows no error: `record()` returns `false`.\n'}])
+    await page.goto(pr.url)
+    await ready(page)
+    const code = page.locator('.mdp-new code', {hasText: 'record()'})
+    await expect(code).toHaveClass(/\bmdw\b.*\bins\b|\bins\b.*\bmdw\b/)
+    await expect(code.locator('ins')).toHaveCount(0)
+    const fill = await page.locator('.mdp-new ins.mdw').first().evaluate((el) => parseFloat(getComputedStyle(el).paddingTop))
+    expect(fill).toBeGreaterThan(0)
+})

@@ -637,6 +637,11 @@ button.pr-link { border: 0; background: none; padding: 0; font: inherit; cursor:
 .log-trailers a { color: var(--accent); }
 .md ins.mdw { text-decoration: none; background: var(--d-ins-w); border-radius: 2px; box-shadow: 0 0 0 1px var(--d-ins-w); }
 .md del.mdw { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--deleted) 70%, transparent); background: var(--d-del-w); border-radius: 2px; box-shadow: 0 0 0 1px var(--d-del-w); }
+/* the marks fill the line's height (Inter's glyph box is 1.21em), so a change that wraps reads as one, with no gap
+   between its lines */
+.md ins.mdw, .md del.mdw { padding-block: calc((1lh - 1.21em) / 2); }
+.md code.mdw.ins { background: var(--d-ins-w); }
+.md code.mdw.del { background: var(--d-del-w); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--deleted) 70%, transparent); }
 .md .md-delblock { position: relative; opacity: .85; text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--deleted) 60%, transparent); background: var(--d-del); border-radius: 3px; box-shadow: -10px 0 0 0 var(--d-del), 10px 0 0 0 var(--d-del); margin-bottom: 12px; }
 .md .md-delblock > :last-child { margin-bottom: 0; }
 .mdp-legend { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--fg-dim); font-size: 11.5px; flex-shrink: 0; padding-left: 12px; }
@@ -656,7 +661,7 @@ button.pr-link { border: 0; background: none; padding: 0; font: inherit; cursor:
 .tb-text .ic { width: 14px; height: 14px; }
 .tb-text.on { color: var(--fg-strong); }
 .seg-md { margin-right: 4px; }
-.md del.mdw + ins.mdw, .md ins.mdw + del.mdw { margin-left: 2px; }
+.md .mdw.del + .mdw.ins, .md .mdw.ins + .mdw.del, .md del.mdw + ins.mdw, .md ins.mdw + del.mdw { margin-left: 2px; }
 @media (max-width: 760px) { .tb-text span { display: none; } .tb-text { padding: 0 6px; } }
 .tip {
     position: fixed; left: 0; top: 0; z-index: 100; max-width: min(420px, calc(100vw - 12px)); pointer-events: none;

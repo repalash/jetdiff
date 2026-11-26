@@ -286,6 +286,14 @@ function applyMarks(root) {
             else buf += ch
         }
         flush()
+        // an inline code span changed whole is marked itself: a mark inside it would leave its padding unmarked
+        const code = node.parentElement
+        const only = frag.childNodes.length === 1 && frag.firstChild.nodeType === 1 && frag.firstChild
+        if (only && code?.localName === 'code' && code.childNodes.length === 1) {
+            code.classList.add('mdw', only.localName)
+            node.nodeValue = only.textContent
+            continue
+        }
         node.replaceWith(frag)
     }
 }
