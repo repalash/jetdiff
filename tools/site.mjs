@@ -34,8 +34,7 @@ const PREFIXES = {
     // Monaco's AMD build, loaded by its own loader from vendor/monaco-editor@<version>/min/vs
     'monaco-editor/': {
         files: (rel) => rel.startsWith('min/vs/'),
-        start: ['min/vs/loader.js', 'min/vs/editor/editor.main.js', 'min/vs/editor/editor.main.css',
-            'min/vs/base/worker/workerMain.js', 'min/vs/base/browser/ui/codicons/codicon/codicon.ttf'],
+        start: (p) => ['min/vs/loader.js', ...amdModules(p, 'min/vs/editor/editor.main.js')],
     },
     // every grammar, as a file can be in any language; loaded when first used
     '@shikijs/langs/': {files: (rel) => /^dist\/[^/]+\.mjs$/.test(rel) && rel !== 'dist/index.mjs', start: []},
@@ -67,6 +66,30 @@ function pkg(name) {
 
 const nameOf = (spec) => spec.split('/').slice(0, spec.startsWith('@') ? 2 : 1).join('/')
 const vendorPath = (p, rel) => `vendor/${p.name}@${p.version}/${rel}`
+
+/**
+ * An AMD module of a package's min/vs, with the modules it defines as dependencies (hashed chunks since Monaco 0.53),
+ * and the files the entry names by URL (`require.toUrl`: Monaco's editor worker and stylesheet). The language workers
+ * (json, css, html, ts) are named by URL in other modules, those of Monaco's language services, which the app never
+ * starts: editor.js gives each language an id of its own.
+ */
+function amdModules(p, entry) {
+    const out = new Set()
+    const file = (from, id) => id.startsWith('.') ? path.posix.join(path.posix.dirname(from), id) : `min/${id}`
+    const walk = (rel) => {
+        if (out.has(rel)) return
+        out.add(rel)
+        const src = fs.readFileSync(path.join(p.dir, rel), 'utf8')
+        const deps = src.match(/^define\("[^"]*",\s*\[([^\]]*)\]/)
+        if (!deps) throw new Error(`${p.name}: ${rel} is not an AMD module`)
+        for (const [, id] of deps[1].matchAll(/"([^"]+)"/g)) {
+            if (id !== 'exports' && id !== 'require') walk(file(rel, id.replace(/!$/, '')) + '.js')
+        }
+        if (rel === entry) for (const [, url] of src.matchAll(/toUrl\("([^"]+)"\)/g)) out.add(file(rel, url))
+    }
+    walk(entry)
+    return [...out]
+}
 
 // A bare specifier's file, by the package's "exports" (the browser's or the ES module's), as a bundler would find it
 function resolve(spec) {
@@ -115,8 +138,9 @@ export function vendor() {
         imports[spec] = './' + vendorPath(r.p, r.rel)
         walk(r.p, r.rel)
     }
-    for (const [prefix, {files: keep, start: onStart}] of Object.entries(PREFIXES)) {
+    for (const [prefix, {files: keep, start}] of Object.entries(PREFIXES)) {
         const p = pkg(prefix.slice(0, -1))
+        const onStart = typeof start === 'function' ? start(p) : start
         imports[prefix] = `./vendor/${p.name}@${p.version}/`
         for (const rel of listFiles(p.dir)) if (keep(rel)) add(p, rel, onStart.includes(rel))
         for (const rel of onStart) if (!files.has(vendorPath(p, rel))) throw new Error(`${p.name}: no ${rel}`)

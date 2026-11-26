@@ -32,6 +32,24 @@ test('a pull request opened before works with no network', async ({page, context
     expect(new URL(page.url()).searchParams.get('pr')).toBe(PR)
 })
 
+// Monaco falls back to its main thread, with a warning, when its worker cannot start (the worker's file not kept, or
+// refused by the policy)
+test('the diffs are computed in Monaco\'s worker, with no network too', async ({page, context}) => {
+    const warnings = []
+    page.on('console', (m) => { if (/web worker/i.test(m.text())) warnings.push(m.text()) })
+    await page.goto(`./?pr=${PR}&file=plugins/cloud/src/auth/CloudAuth.ts`)
+    await controlled(page)
+    await page.reload()
+    await ready(page)
+    await goOffline(context)
+    const worker = page.waitForEvent('worker')
+    await page.reload()
+    await worker
+    await ready(page)
+    await expect(page.locator('#diff-count')).toHaveText(/^\d+ differences$/)
+    expect(warnings).toEqual([])
+})
+
 test('a branch ref is never answered from a saved copy', async ({page, context}) => {
     page.github.handle(({path}) => path.includes('/git/ref/') && {object: {sha: 'a'.repeat(40)}})
     await page.goto('./')

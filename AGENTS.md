@@ -9,7 +9,7 @@ they are, and the build only copies them, with the libraries from `node_modules`
 - Vanilla ES modules in `js/`, `style.css`, `index.html`; `sw.js` is the service worker (the offline app, updated a
   whole release at a time: `js/update.js` tells the page a new one is ready)
 - Libraries from npm at exact versions (package-lock.json), served by the site itself from `vendor/<name>@<version>/`:
-  Monaco 0.52 (its AMD build), Shiki with its JavaScript regex engine, markdown-it, DOMPurify, fflate for offline
+  Monaco 0.57 (its AMD build), Shiki with its JavaScript regex engine, markdown-it, DOMPurify, fflate for offline
   packs, and the Inter and JetBrains Mono fonts (@fontsource). The ES modules import each other by name through the
   import map in `index.html`. Nothing loads from a CDN.
 - A Content Security Policy on every page (`worker/headers.js`, sent by the Worker and the dev server alike): no

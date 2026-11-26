@@ -2,19 +2,20 @@
 // against (tools/serve.mjs) sends the same.
 
 // index.html's import map, the app's one inline script (npm run vendor writes this when the libraries change)
-export const IMPORT_MAP_HASH = 'sha256-qh5FPXDclmQA6hPa1q6aigM0g+0UVudlaPBzw/QqK4E='
+export const IMPORT_MAP_HASH = 'sha256-7Ch4d8SjiGpNHVuhHDvg9m38KBGcvOLF19GHaPGaFqU='
 
 // Only what the app needs. Everything it runs comes from the site (the libraries too, in vendor/). Monaco sets inline
 // styles. Images: the site, the diff's own blob: and data: images, and any https image, as Markdown previews show remote
 // images. Connections go to the site, GitHub's API and avatars, and to the https sites snapshots and packs are opened
 // from (?snap=https://…, ?packs=…): any https host, which gives away nothing img-src does not already allow. Workers:
-// Monaco's from the site, and fflate's, which it starts from blob: URLs to unzip packs.
+// Monaco's and fflate's, which they start from blob: URLs (Monaco's then load its worker from the site). Fonts: the
+// site's, and Monaco's icon font, which its stylesheet carries as a data: URL.
 export const CONTENT_SECURITY_POLICY = [
     "default-src 'none'",
     `script-src 'self' '${IMPORT_MAP_HASH}'`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' https: data: blob:",
-    "font-src 'self'",
+    "font-src 'self' data:",
     "connect-src 'self' https:",
     "worker-src 'self' blob:",
     "manifest-src 'self'",

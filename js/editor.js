@@ -2,8 +2,6 @@ import {THEMES} from './themes.js'
 
 // The libraries come from the site, at the versions index.html's import map names (tools/site.mjs copies them)
 const MONACO_BASE = import.meta.resolve('monaco-editor/min/vs')
-// Monaco's worker finds the rest of Monaco from its own URL
-const WORKER_URL = `${MONACO_BASE}/base/worker/workerMain.js`
 // Shiki's grammars and themes are imported by file: its own loaders name them without the extension, which only a
 // bundler resolves
 const grammar = (id) => import(`@shikijs/langs/dist/${id}.mjs`)
@@ -70,7 +68,7 @@ export function loadMonaco() {
         const shikiReady = loadShiki()
         await loadScript(`${MONACO_BASE}/loader.js`)
         window.require.config({paths: {vs: MONACO_BASE}})
-        window.MonacoEnvironment = {getWorkerUrl: () => WORKER_URL}
+        // editor.main sets MonacoEnvironment itself: its workers start from blob: URLs that load the worker from the site
         const monaco = await new Promise((resolve, reject) => window.require(['vs/editor/editor.main'], () => resolve(window.monaco), reject))
         await shikiReady
         // the code font may arrive after Monaco measured it

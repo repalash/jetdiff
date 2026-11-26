@@ -142,8 +142,8 @@ npm run themes -- /tmp/mtui
 ## Deploy
 
 [jetdiff.com](https://jetdiff.com) is a Cloudflare Worker with static assets (`wrangler.jsonc`, `worker/index.js`):
-`npm run build` copies the files the site serves into `dist/` (the libraries into `dist/vendor/`, about 700 files and
-24 MiB in all, and `sw.js` with a release id: a hash of the app's files), and `npm run deploy` builds and deploys
+`npm run build` copies the files the site serves into `dist/` (the libraries into `dist/vendor/`, about 690 files and
+35 MiB in all, and `sw.js` with a release id: a hash of the app's files), and `npm run deploy` builds and deploys
 them with wrangler. GitHub Actions deploys `main` after the tests pass (`.github/workflows/ci.yml`), with the repository
 secrets `CLOUDFLARE_API_TOKEN` (an account token with *Individual Workers Editor* on the jetdiff Worker only) and
 `CLOUDFLARE_ACCOUNT_ID`, and optionally `APP_CLIENT_SECRET` to update the GitHub App's client secret. The domains are
