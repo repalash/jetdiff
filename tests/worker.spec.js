@@ -61,8 +61,31 @@ test('sign-in: login, callback with the state, refresh from the cookie, logout',
         expect(refreshed.headers.get('set-cookie')).toContain('jd_refresh=rt2')
     } finally { gh2.restore() }
 
-    const out = await get('/auth/logout', {method: 'POST'})
+    const out = await get('/auth/logout', {method: 'POST', headers: {origin: 'https://jetdiff.com'}})
     expect(out.headers.get('set-cookie')).toContain('jd_refresh=; Path=/auth; Max-Age=0')
+})
+
+test('logout revokes the token at GitHub, for the page itself only, whatever GitHub answers', async () => {
+    const sent = []
+    let answer = () => new Response(null, {status: 204})
+    const real = globalThis.fetch
+    globalThis.fetch = async (url, init) => {
+        sent.push({url: String(url), method: init.method, authorization: init.headers.authorization, body: JSON.parse(init.body)})
+        return answer()
+    }
+    const logout = (origin) => get('/auth/logout', {method: 'POST', headers: {origin, 'content-type': 'application/json'}, body: JSON.stringify({token: 'tok'})})
+    try {
+        expect((await logout('https://evil.example')).status).toBe(403)
+        expect(sent).toEqual([])
+        const out = await logout('https://jetdiff.com')
+        expect(out.status).toBe(204)
+        expect(out.headers.get('set-cookie')).toContain('jd_refresh=; Path=/auth; Max-Age=0')
+        expect(sent).toEqual([{url: 'https://api.github.com/applications/cid/token', method: 'DELETE', authorization: `Basic ${btoa('cid:secret')}`, body: {access_token: 'tok'}}])
+        answer = () => new Response('{"message": "Not Found"}', {status: 404})
+        expect((await logout('https://jetdiff.com')).status).toBe(204)
+        answer = () => { throw new TypeError('fetch failed') }
+        expect((await logout('https://jetdiff.com')).status).toBe(204)
+    } finally { globalThis.fetch = real }
 })
 
 test('sign-in only returns to a path on this site', async () => {

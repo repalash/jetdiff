@@ -81,7 +81,30 @@ export async function auth(request, env, url) {
             {headers: withTokens(new Headers({'cache-control': 'no-store'}), tokens)})
     }
 
-    if (route === 'logout' && post) return new Response(null, {status: 204, headers: {'set-cookie': cookie(REFRESH, '', 0)}})
+    if (route === 'logout' && post) {
+        // the page's own request only: another site must not sign anyone out, nor have tokens revoked through here
+        if (request.headers.get('origin') !== url.origin) return fail('Forbidden', 403)
+        const {token} = await request.json().catch(() => ({}))
+        if (typeof token === 'string' && token) await revoke(env, token)
+        return new Response(null, {status: 204, headers: {'set-cookie': cookie(REFRESH, '', 0)}})
+    }
 
     return fail('Not found', 404)
+}
+
+// a refusal (an expired or already revoked token) or no answer does not stop the sign-out
+async function revoke(env, token) {
+    try {
+        await fetch(`https://api.github.com/applications/${encodeURIComponent(env.GITHUB_CLIENT_ID)}/token`, {
+            method: 'DELETE',
+            headers: {
+                authorization: `Basic ${btoa(`${env.GITHUB_CLIENT_ID}:${env.GITHUB_CLIENT_SECRET}`)}`,
+                accept: 'application/vnd.github+json',
+                'content-type': 'application/json',
+                // GitHub refuses API requests without one
+                'user-agent': 'jetdiff',
+            },
+            body: JSON.stringify({access_token: token}),
+        })
+    } catch { /* signed out here all the same */ }
 }

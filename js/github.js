@@ -44,9 +44,12 @@ export function signIn() {
     location.assign(`${new URL('login', AUTH)}?return=${encodeURIComponent(location.pathname + location.search)}`)
 }
 
+/** Forgets the token; one from Sign in with GitHub goes to the Worker too, which revokes it at GitHub (a pasted one never leaves for this site). */
 export async function signOut() {
+    const token = signedIn() ? getToken() : ''
     setToken('')
-    await fetch(new URL('logout', AUTH), {method: 'POST'}).catch(() => {})
+    await fetch(new URL('logout', AUTH), {method: 'POST', ...token && {headers: {'content-type': 'application/json'}, body: JSON.stringify({token})}})
+        .catch(() => {})
 }
 
 /** Takes the token Sign in with GitHub left in the URL fragment, if this tab started the sign-in; true if taken. */

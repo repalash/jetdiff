@@ -206,18 +206,74 @@ function tokenDialog() {
         if (go) go.onclick = signIn
     })
     const clear = $('#tok-clear', dlg)
-    if (clear) clear.onclick = async () => {
-        await signOut()
-        dlg.close()
-        toast(viaApp ? 'Signed out' : 'Token removed')
-        reloadTarget()
-    }
+    if (clear) clear.onclick = () => { dlg.close(); signOutDialog(viaApp) }
     $('form', dlg).onsubmit = (e) => {
         e.preventDefault()
         const v = $('#tok', dlg).value.trim()
         if (v) { setToken(v); toast('Token saved') }
         dlg.close()
         if (v) reloadTarget()
+    }
+}
+
+/** The stored edits not committed yet, of every pull request: carried, waiting for their head, and kept aside. */
+function storedEditCount() {
+    flushEdits()
+    return Object.values(editStore()).reduce((n, e) => n + Object.keys(e?.files || {}).length + (e?.pending?.length || 0) + (e?.conflicts?.length || 0), 0)
+}
+
+// what GitHub data and its traces this device keeps (not the settings, nor the edits)
+const DATA_KEYS = ['recent', 'offline', 'identity', 'snap', 'packsFrom']
+
+/** Removes the GitHub data saved on this device: the saved responses and contents, and the jd.* data keys. */
+async function removeDeviceData() {
+    await clearOffline()
+    try {
+        for (const k of DATA_KEYS) localStorage.removeItem('jd.' + k)
+        // the Viewed marks and their queue
+        for (const k of Object.keys(localStorage)) if (k.startsWith('jd.viewed.')) localStorage.removeItem(k)
+    } catch { /* no storage */ }
+    renderRecordedBar()
+}
+
+/** Removes every edit not committed yet, of every pull request. */
+function removeEdits() {
+    clearTimeout(saveTimer)
+    state.edits = new Map()
+    state.editsBase = new Map()
+    try { localStorage.removeItem('jd.edits') } catch { /* no storage */ }
+    renderEdits()
+}
+
+/** Sign out, or remove a pasted token: asks first, and offers to remove what this device keeps. */
+function signOutDialog(viaApp) {
+    const edits = storedEditCount()
+    const what = viaApp ? 'Sign out' : 'Remove token'
+    const dlg = openDialog(`
+        <form class="dlg" method="dialog">
+            <h2>${what}</h2>
+            <p class="dim">${viaApp ? 'Signs out of GitHub here, and revokes the token at GitHub.' : 'Removes the token from this browser.'}</p>
+            <label class="cmt-amend"><input type="checkbox" id="so-data" checked><span>Also remove data saved on this device</span></label>
+            <p class="dim small">The pull requests saved for offline use and opened before, recent pull requests, Viewed marks and
+            commit options. Settings such as the theme stay.</p>
+            ${edits ? `<label class="cmt-amend"><input type="checkbox" id="so-edits"><span>Also remove my unpushed edits (${plural(edits, 'file')})</span></label>` : ''}
+            <div class="dlg-actions">
+                <span class="spacer"></span>
+                <button type="button" id="so-cancel" class="btn btn-ghost">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="so-go">${what}</button>
+            </div>
+        </form>`, {focus: '#so-go', cancel: '#so-cancel'})
+    $('form', dlg).onsubmit = async (e) => {
+        e.preventDefault()
+        const data = $('#so-data', dlg).checked, dropEdits = !!$('#so-edits', dlg)?.checked
+        $('#so-go', dlg).disabled = true
+        await signOut()
+        if (data) await removeDeviceData()
+        if (dropEdits) removeEdits()
+        dlg.close()
+        toast(viaApp ? 'Signed out' : 'Token removed')
+        if (state.target) reloadTarget()
+        else showLanding()
     }
 }
 

@@ -70,7 +70,20 @@ Public repositories work without signing in (GitHub allows 60 requests an hour t
 higher limit and commits, either **Sign in with GitHub** (on jetdiff.com: it sees the repositories where the jetdiff
 app is installed, and its token renews itself), or paste a token in the settings (the gear in the title bar): a fine-grained token with *Contents:
 read* and *Pull requests: read and write* (write is only for Viewed), and *Contents: read and write* to commit edits;
-or a classic token with `repo`. The token stays in the browser's storage and is sent only to `api.github.com`.
+or a classic token with `repo`. The token stays in the browser's storage and is sent only to `api.github.com` (a
+token from Sign in with GitHub goes to this site once more, at sign-out, which revokes it at GitHub). Sign out and
+Remove token ask first, and can also remove the data saved on this device (saved pull requests, recents, Viewed marks,
+commit options; not the settings) and, separately, the edits not pushed yet.
+
+### Edits
+
+The pencil over the diff makes the right side (the pull request's head) editable; Commit and Push commits the edits
+to the pull request's branch, with Amend and Undo. Amend keeps the amended commit's author and date, as `git commit
+--amend` does; its committer is the one set in Commit Options, else the author set there, else the token's account.
+Edits are kept on the device until committed. A file that is not valid UTF-8, or has both CRLF and LF line endings,
+opens read-only (its label says why), as an edit would change the rest of the file too. When the pull request gets
+new commits that change an edited file, the edit is kept aside, not applied: the Commit panel lists it to copy,
+download or discard.
 
 ### Offline
 

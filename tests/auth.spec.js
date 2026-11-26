@@ -44,6 +44,49 @@ test('a signed-in token that expired is renewed before it is used', async ({page
     expect([...seen]).toEqual(['Bearer new'])
 })
 
+/** Opens the start page with `items` in its storage, and the logout requests the Worker gets (their bodies) in `logouts`. */
+async function withStorage(page, context, items) {
+    const logouts = []
+    await context.route('**/auth/config', (r) => r.fulfill({json: {clientId: 'cid', appSlug: 'jetdiff'}}))
+    await context.route('**/auth/logout', (r) => { logouts.push(r.request().postDataJSON()); r.fulfill({status: 204}) })
+    await page.goto('./')
+    await page.evaluate(async (items) => {
+        for (const [k, v] of Object.entries(items)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v))
+        await (await caches.open('jd-api')).put('https://offline.jd/x/repos/a/b/pulls/1', new Response('{}'))
+    }, items)
+    await page.reload()
+    await page.locator('#land-token').click()
+    await page.locator('#tok-clear').click()
+    return logouts
+}
+const keys = (page) => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('jd.')).sort())
+const DATA = {'jd.recent': [{key: 'pr=a/b/1', title: 'A', label: 'a/b#1'}], 'jd.viewed.a/b/#1': ['x'], 'jd.viewed.a/b/#1.pending': {x: true},
+    'jd.offline': [{owner: 'a', repo: 'b', prs: [{number: 1, title: 'A'}], at: 1}], 'jd.identity': {author: {name: 'A', email: 'a@example.com'}, committer: null},
+    'jd.fontSize': 15, 'jd.edits': {'a/b#1': {head: 'h', files: {'x.txt': 'edited\n'}}}}
+
+test('Sign out asks first, revokes the token, and removes the data saved on this device but not the edits', async ({page, context}) => {
+    const logouts = await withStorage(page, context, {...DATA, 'jd.token': 'tok1', 'jd.tokenExpires': String(Date.now() + 3600000)})
+    await expect(page.locator('#so-data')).toBeChecked()
+    await expect(page.locator('#so-edits')).not.toBeChecked()
+    await expect(page.locator('#dialog')).toContainText('Also remove my unpushed edits (1 file)')
+    await page.locator('#so-go').click()
+    await expect(page.locator('#toasts')).toContainText('Signed out')
+    expect(logouts).toEqual([{token: 'tok1'}])
+    expect(await keys(page)).toEqual(['jd.edits', 'jd.fontSize'])
+    expect(await page.evaluate(() => caches.has('jd-api'))).toBe(false)
+})
+
+test('Remove token sends no token to this site, and removes the unpushed edits only when asked', async ({page, context}) => {
+    const logouts = await withStorage(page, context, {...DATA, 'jd.token': 'ghp_pasted'})
+    await page.locator('#so-data').uncheck()
+    await page.locator('#so-edits').check()
+    await page.locator('#so-go').click()
+    await expect(page.locator('#toasts')).toContainText('Token removed')
+    expect(logouts).toEqual([null])
+    expect(await keys(page)).toEqual(Object.keys(DATA).filter((k) => k !== 'jd.edits').sort())
+    expect(await page.evaluate(() => caches.has('jd-api'))).toBe(true)
+})
+
 test('a pasted token still works, and no sign-in shows where the site has none', async ({page}) => {
     const seen = authHeaders(page.github)
     await page.goto('./')
