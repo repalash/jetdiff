@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import {test, expect, ready, recorded, FIXTURE_DIR, PR} from './fixture.js'
 
 const fileParam = (page) => new URL(page.url()).searchParams.get('file')
+const tabParams = (page) => ['tabs', 'tab'].map((k) => new URL(page.url()).searchParams.get(k))
 
 test('opens a pull request: the files, a diff, next difference and next file', async ({page}) => {
     await page.goto(`./?pr=${PR}&file=plugins/cloud/src/auth/CloudAuth.ts`)
@@ -83,6 +84,29 @@ test('the timeline shows the reactions to the description, the comments and the 
     await expect(page.locator('.tl-desc .tl-react').first()).toHaveAttribute('title', '1 person reacted with thumbs up')
     await expect(page.locator('.tl-card:not(.tl-desc, .tl-review) .tl-react')).toHaveText(['👍3'])
     await expect(page.locator('.tl-reply .tl-react')).toHaveText(['🚀1'])
+})
+
+test('the open tabs and the active one are kept in the URL, in place: a reload shows them again', async ({page}) => {
+    await page.goto(`./?pr=${PR}`)
+    await ready(page)
+    expect(tabParams(page)).toEqual([null, null])
+    const entries = await page.evaluate(() => history.length)
+    await page.locator('#pr-timeline').click()
+    expect(tabParams(page)).toEqual(['log,timeline', 'timeline'])
+    await page.reload()
+    await expect(page.locator('#tab-timeline')).toHaveClass(/active/)
+    await expect(page.locator('#timeline-host .md').first()).toContainText('sandboxed')
+    await page.locator('#tab-log .tab-x').click()
+    await page.locator('#tab-changes').click()
+    expect(tabParams(page)).toEqual(['timeline', null])
+    expect(await page.evaluate(() => history.length)).toBe(entries)
+    await page.reload()
+    await ready(page)
+    await expect(page.locator('#tab-log')).toBeHidden()
+    await expect(page.locator('#tab-changes')).toHaveClass(/active/)
+    // a Timeline tab from the URL loads once shown
+    await page.locator('#tab-timeline').click()
+    await expect(page.locator('#timeline-host .md').first()).toContainText('sandboxed')
 })
 
 test('Search Everywhere opens a file', async ({page}) => {

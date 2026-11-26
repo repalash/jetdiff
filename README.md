@@ -52,8 +52,13 @@ Open `?pr=owner/repo/123`, or paste a pull request, commit or compare URL on the
 | `?pr=owner/repo/123` | a pull request |
 | `?pr=owner/repo/123&file=src/a.ts` | a pull request, at a file |
 | `?pr=owner/repo/123&commit=<sha>` | one commit of a pull request (`<sha1>..<sha2>` for a range) |
+| `?pr=owner/repo/123&tabs=log,timeline&tab=timeline` | a pull request with the Log and Timeline tabs open, the Timeline in front |
 | `?compare=owner/repo/main...feature` | a compare from where `feature` branched off `main`; with `..`, the two tips directly |
 | `jetdiff.com/owner/repo/pull/123` | a GitHub link with `github.com` replaced: pull requests (also `…/files/<sha1>..<sha2>`), commits and compares |
+
+The URL follows the open tabs in place (a reload, or a shared link, opens them again; Back does not step through
+them): `tabs` lists the tabs open besides the diff when they are not the default, the Log alone (`tabs=` with none),
+and `tab` names the one in front when it is not the diff.
 
 GitHub lists at most 3000 files of a pull request or a commit, and 300 of a compare: a notice says when a list is cut
 short, and when the merge base could not be read (the diff is then against the base branch's tip).

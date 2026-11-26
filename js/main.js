@@ -431,6 +431,8 @@ const state = {
     cs: null, // the loaded change set
     order: [], // files in tree order
     index: -1,
+    tab: 'changes', // the active tab: 'changes' (the diff), 'log' or 'timeline'
+    openTabs: new Set(['log']), // the tabs open besides the diff, for the pull request shown
     viewed: new Set(),
     viewedRemote: null, // {id} when Viewed syncs with GitHub
     monaco: null,
@@ -468,6 +470,8 @@ function go(url) {
 function navigate(target, file) {
     const p = targetToParams(target)
     if (file) p.set('file', file)
+    // the tabs belong to the pull request: another one opens with its own
+    if (prKey(target) === state.lastPr) withTabs(p)
     go('?' + p.toString())
 }
 
@@ -577,16 +581,19 @@ async function openTarget(target, file) {
     state.ready = true
     if (fullPr(cs) && $('#cmt-amend')?.checked) loadHeadMessage().then(() => renderCommitPanel(false))
     const pk = prKey(target)
+    let tab = state.tab
     if (state.lastPr !== pk) {
         state.lastPr = pk
         state.cmtExcluded = new Set()
-        state.closedTabs = new Set()
+        tab = tabsFromUrl()
     }
     renderEdits()
     changeSetNotices(cs)
     addRecent(target, cs.title)
     document.title = `${cs.title} · ${labelForTarget(target)}`
     renderHeader()
+    if (tab === 'timeline' && !$('#tab-timeline').hidden) openTimeline()
+    else setTab(tab === 'log' && !$('#tab-log').hidden ? 'log' : 'changes')
     state.tree.setFiles(cs.files)
     state.order = state.tree.order
     loadViewed()
@@ -803,7 +810,8 @@ function buildShell() {
     $('#btn-commit').onclick = () => openCommitPanel()
     $('#tab-log').onclick = (e) => e.target.closest('.tab-x') ? closeTab('log') : setTab('log')
     $('#tab-changes').onclick = () => setTab('changes')
-    $('#tab-timeline').onclick = (e) => e.target.closest('.tab-x') ? closeTab('timeline') : setTab('timeline')
+    // a Timeline opened from the URL loads when it is first shown
+    $('#tab-timeline').onclick = (e) => e.target.closest('.tab-x') ? closeTab('timeline') : openTimeline()
     $('#pr-timeline').onclick = () => openTimeline()
     $('#timeline-host').onclick = (e) => {
         const li = e.target.closest('.tl-commits li[data-sha]')
@@ -926,7 +934,6 @@ function renderHeader() {
     } else pill.className = 'state-pill hidden'
     $('#btn-github').href = githubUrl(cs.htmlUrl) + (fullPr(cs) ? '/files' : '')
     const range = cs.range && `${short(cs.range[0])}..${short(cs.range[1])}`
-    $('#tab-log').hidden = !cs.commits?.length || !!state.closedTabs?.has('log')
     if (cs.commits?.length) {
         state.log ??= new LogView($('#log-host'), {onOpen: openCommitSpec, onSelect: (html) => { $('#st-log-sel').innerHTML = html }})
         $('#st-log-n').innerHTML = `${icons.log}${plural(cs.commits.length, 'commit')}${pr ? ` on ${esc(pr.head.ref)}` : ''}`
@@ -939,10 +946,9 @@ function renderHeader() {
     const tlKey = pr ? prKey(target, pr.number) : null
     if (state.timelineKey && state.timelineKey !== tlKey) {
         state.timelineKey = null
-        $('#tab-timeline').hidden = true
         $('#timeline-host').innerHTML = ''
-        if (state.tab === 'timeline') setTab('changes')
     }
+    renderTabs()
     if (pr) {
         $('#pr-title').innerHTML = `${esc(pr.title)} <span class="dim">#${esc(pr.number)}</span>`
         $('#pr-link').href = githubUrl(pr.html_url)
@@ -1125,20 +1131,48 @@ function applyHighlight() {
     state.sbs?.setOptions({highlight: settings.highlight})
 }
 
+// the tabs besides the diff, in their order
+const TABS = ['log', 'timeline']
+
+/** Shows the open tabs that the change set has: the Log where it has commits, the Timeline of a pull request. */
+function renderTabs() {
+    $('#tab-log').hidden = !state.cs?.commits?.length || !state.openTabs.has('log')
+    $('#tab-timeline').hidden = !state.cs?.pr || !state.openTabs.has('timeline')
+}
+
+/** `p`, the page's parameters, with the open tabs where they are not the default (the Log), and the active one. */
+function withTabs(p) {
+    p.delete('tabs')
+    p.delete('tab')
+    const open = TABS.filter((k) => !$('#tab-' + k).hidden).join(',')
+    if (open !== (state.cs?.commits?.length ? 'log' : '')) p.set('tabs', open)
+    if (state.tab !== 'changes') p.set('tab', state.tab)
+    return p
+}
+
+/** The tabs the URL opens (`tabs=log,timeline`, the active one in `tab=`) as a pull request opens; returns the active one. */
+function tabsFromUrl() {
+    const p = new URLSearchParams(location.search)
+    const tab = TABS.includes(p.get('tab')) ? p.get('tab') : 'changes'
+    state.openTabs = new Set(p.has('tabs') ? p.get('tabs').split(',') : ['log'])
+    if (tab !== 'changes') state.openTabs.add(tab)
+    return tab
+}
+
 function closeTab(tab) {
-    state.closedTabs ??= new Set()
-    state.closedTabs.add(tab)
-    $('#tab-' + tab).hidden = true
-    if (state.tab === tab) setTab('changes')
+    state.openTabs.delete(tab)
+    renderTabs()
+    setTab(state.tab === tab ? 'changes' : state.tab)
 }
 
 function showLog() {
-    state.closedTabs?.delete('log')
-    $('#tab-log').hidden = false
+    state.openTabs.add('log')
+    renderTabs()
     setTab('log')
     closeDrawer()
 }
 
+/** Shows `tab`, and keeps the tabs in the page's URL (in place: tabs make no history entries). */
 function setTab(tab) {
     state.tab = tab
     for (const k of ['log', 'changes', 'timeline']) $('#tab-' + k).classList.toggle('active', k === tab)
@@ -1147,6 +1181,7 @@ function setTab(tab) {
     $('#toolbar').hidden = tab !== 'changes'
     $('#viewer').hidden = tab !== 'changes'
     for (const g of document.querySelectorAll('.statusbar .st-group')) g.hidden = g.dataset.tab !== tab
+    history.replaceState(null, '', '?' + withTabs(new URLSearchParams(location.search)))
 }
 
 /** Opens a commit, or an 'a..b' range, of the loaded changes, optionally at a file. */
@@ -1274,7 +1309,7 @@ async function openFileAt(i, push = true, keepScroll = false) {
     if (push) {
         const p = targetToParams(state.target)
         p.set('file', f.path)
-        history.replaceState(null, '', '?' + p.toString())
+        history.replaceState(null, '', '?' + withTabs(p).toString())
     }
     $('#tab-label').textContent = state.target.type === 'pr' ? `Diff for Pull Request #${state.target.number}` : `Changes: ${baseName(f.path)}`
     $('#tab-label').title = f.path
@@ -1610,7 +1645,8 @@ const reviewCount = (reviews) => reviews.filter((r) => r.state !== 'PENDING').le
 async function openTimeline() {
     const {cs, target: t} = state
     if (!cs?.pr) return
-    $('#tab-timeline').hidden = false
+    state.openTabs.add('timeline')
+    renderTabs()
     setTab('timeline')
     closeDrawer()
     const pr = cs.pr
