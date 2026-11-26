@@ -1,7 +1,6 @@
 import {test, expect} from '@playwright/test'
 import worker from '../worker/index.js'
-import {CONTENT_SECURITY_POLICY, headersFile} from '../worker/headers.js'
-import fs from 'node:fs'
+import {CONTENT_SECURITY_POLICY} from '../worker/headers.js'
 
 const env = {ASSETS: {fetch: async () => new Response('asset')}, GITHUB_CLIENT_ID: 'cid', GITHUB_CLIENT_SECRET: 'secret', GITHUB_APP_SLUG: 'jetdiff'}
 const get = (path, init = {}, e = env) => worker.fetch(new Request('https://jetdiff.com' + path, init), e)
@@ -38,15 +37,6 @@ test('pages get the Content Security Policy, also when revalidated, and other fi
     const script = await worker.fetch(new Request('https://jetdiff.com/js/main.js'), typed('text/javascript'))
     expect(script.headers.get('content-security-policy')).toBeNull()
     expect(script.headers.get('x-content-type-options')).toBe('nosniff')
-})
-
-test('the libraries skip the Worker and get the same headers from dist/_headers', async () => {
-    const config = JSON.parse(fs.readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8').replace(/^\s*\/\/.*$/gm, ''))
-    expect(config.assets.run_worker_first).toEqual(['/*', '!/vendor/*'])
-    const file = headersFile()
-    expect(file.split('\n')[0]).toBe('/vendor/*')
-    expect(file).toContain('  x-content-type-options: nosniff\n')
-    expect(file).toContain(`  content-security-policy: ${CONTENT_SECURITY_POLICY}\n`)
 })
 
 test('sign-in is off until the app is set up', async () => {

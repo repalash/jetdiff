@@ -7,9 +7,7 @@
         "directory": "./dist",
         "binding": "ASSETS",
         "not_found_handling": "404-page",
-        // the libraries (vendor/, ~160 files on a first visit) skip the Worker: static asset requests are not metered, and
-        // dist/_headers gives them their headers (build.mjs)
-        "run_worker_first": ["/*", "!/vendor/*"]
+        "run_worker_first": true
     },
     // jetdiff.com and www.jetdiff.com are attached to the Worker in the Cloudflare dashboard, so the deploy token needs
     // rights on this Worker only (no routes, DNS or workers.dev)

@@ -24,14 +24,6 @@ export const CONTENT_SECURITY_POLICY = [
     "object-src 'none'",
 ].join('; ')
 
-/**
- * dist/_headers, for the files the static asset server answers without the Worker (wrangler.jsonc run_worker_first):
- * the libraries in vendor/, with the Content Security Policy too, for the 404 page a missing one answers with.
- */
-export function headersFile() {
-    return '/vendor/*\n' + Object.entries(securityHeaders('', true)).map(([k, v]) => `  ${k}: ${v}\n`).join('')
-}
-
 /** The headers for a response of this content type; `document`: it answers a navigation. */
 export function securityHeaders(contentType, document = false) {
     const headers = {'x-content-type-options': 'nosniff', 'referrer-policy': 'strict-origin-when-cross-origin'}
