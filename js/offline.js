@@ -9,7 +9,7 @@ const KEY = 'jd.offline'
 const API_CACHE = 'jd-api' // kept by sw.js
 // what "Remove all saved data" removes
 const SAVED = [API_CACHE, CONTENTS_CACHE, PACK_CACHE, SNAP_CACHE]
-const FFLATE = 'https://esm.sh/fflate@0.8.2'
+const FFLATE = 'fflate'
 const LANGUAGES = ['markdown', 'typescript', 'javascript', 'json', 'css', 'html', 'glsl', 'yaml', 'shellscript']
 
 const sameRepo = (a, b) => a.owner === b.owner && a.repo === b.repo

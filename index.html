@@ -35,11 +35,55 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="apple-mobile-web-app-title" content="jetdiff">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,600;1,400&display=swap">
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="preconnect" href="https://esm.sh" crossorigin>
+    <!-- the libraries come from the site (vendor/, copied from node_modules); npm run vendor writes their versions -->
+    <script type="importmap">
+    {
+        "imports": {
+            "@shikijs/core": "./vendor/@shikijs/core@4.6.0/dist/index.mjs",
+            "@shikijs/engine-javascript": "./vendor/@shikijs/engine-javascript@4.6.0/dist/index.mjs",
+            "@shikijs/langs/": "./vendor/@shikijs/langs@4.6.0/",
+            "@shikijs/primitive": "./vendor/@shikijs/primitive@4.6.0/dist/index.mjs",
+            "@shikijs/themes/": "./vendor/@shikijs/themes@4.6.0/",
+            "@shikijs/types": "./vendor/@shikijs/types@4.6.0/dist/index.mjs",
+            "@shikijs/vscode-textmate": "./vendor/@shikijs/vscode-textmate@10.1.0/dist/index.js",
+            "ccount": "./vendor/ccount@2.0.1/index.js",
+            "character-entities-html4": "./vendor/character-entities-html4@2.1.0/index.js",
+            "character-entities-legacy": "./vendor/character-entities-legacy@3.0.0/index.js",
+            "comma-separated-tokens": "./vendor/comma-separated-tokens@2.0.3/index.js",
+            "dompurify": "./vendor/dompurify@3.2.4/dist/purify.es.mjs",
+            "entities": "./vendor/entities@4.5.0/lib/esm/index.js",
+            "fflate": "./vendor/fflate@0.8.2/esm/browser.js",
+            "hast-util-to-html": "./vendor/hast-util-to-html@9.0.7/index.js",
+            "hast-util-whitespace": "./vendor/hast-util-whitespace@3.0.0/index.js",
+            "html-void-elements": "./vendor/html-void-elements@3.0.0/index.js",
+            "linkify-it": "./vendor/linkify-it@5.0.2/index.mjs",
+            "markdown-it": "./vendor/markdown-it@14.1.0/index.mjs",
+            "mdurl": "./vendor/mdurl@2.1.0/index.mjs",
+            "monaco-editor/": "./vendor/monaco-editor@0.52.2/",
+            "oniguruma-parser/parser": "./vendor/oniguruma-parser@0.12.2/dist/parser/parse.js",
+            "oniguruma-parser/traverser": "./vendor/oniguruma-parser@0.12.2/dist/traverser/traverse.js",
+            "oniguruma-to-es": "./vendor/oniguruma-to-es@4.3.6/dist/esm/index.js",
+            "property-information": "./vendor/property-information@7.2.0/index.js",
+            "punycode.js": "./vendor/punycode.js@2.3.1/punycode.es6.js",
+            "regex-recursion": "./vendor/regex-recursion@6.0.2/src/index.js",
+            "regex-utilities": "./vendor/regex-utilities@2.3.0/src/index.js",
+            "regex/internals": "./vendor/regex@6.1.0/src/internals.js",
+            "shiki/core": "./vendor/shiki@4.6.0/dist/core.mjs",
+            "shiki/engine/javascript": "./vendor/shiki@4.6.0/dist/engine-javascript.mjs",
+            "shiki/langs": "./vendor/shiki@4.6.0/dist/langs.mjs",
+            "space-separated-tokens": "./vendor/space-separated-tokens@2.0.2/index.js",
+            "stringify-entities": "./vendor/stringify-entities@4.0.5/index.js",
+            "uc.micro": "./vendor/uc.micro@2.1.0/index.mjs",
+            "zwitch": "./vendor/zwitch@2.0.4/index.js"
+        }
+    }
+    </script>
+    <link rel="stylesheet" href="./vendor/@fontsource/inter@5.3.0/400.css">
+    <link rel="stylesheet" href="./vendor/@fontsource/inter@5.3.0/500.css">
+    <link rel="stylesheet" href="./vendor/@fontsource/inter@5.3.0/600.css">
+    <link rel="stylesheet" href="./vendor/@fontsource/jetbrains-mono@5.3.0/400.css">
+    <link rel="stylesheet" href="./vendor/@fontsource/jetbrains-mono@5.3.0/600.css">
+    <link rel="stylesheet" href="./vendor/@fontsource/jetbrains-mono@5.3.0/400-italic.css">
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>

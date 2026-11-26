@@ -7,8 +7,9 @@
 ![A threepipe pull request in jetdiff](docs/hero.webp)
 
 jetdiff opens a GitHub pull request, a commit or a compare the way an IDE's diff shows it: a tree of the changed
-files, and whole files side by side with curved connectors between the changes. It is a static web app with no build
-step and no server of its own: it talks to the GitHub API from the browser.
+files, and whole files side by side with curved connectors between the changes. It is a static web app with no
+server of its own: it talks to the GitHub API from the browser, and loads everything else (its libraries and fonts
+too) from the site itself.
 
 ## Features
 
@@ -93,6 +94,9 @@ commits, file contents and conversation. Only the pull requests saved whole are 
 storage stops the download and says so. Edits and Viewed marks made offline stay on the device. Saved data belongs
 to the address the app was opened from.
 
+A new version of the app downloads in the background, all of its files together; an open page keeps the version it
+started with until it reloads, and says *jetdiff updated · Reload* once the new one is ready.
+
 ### Snapshots and offline packs
 
 A snapshot is a set of recorded GitHub responses, for trying the app without a token or sharing a read-only copy:
@@ -121,7 +125,12 @@ npm start        # http://localhost:3000/
 npm test         # Playwright, against a recorded pull request in tests/fixture
 ```
 
-AGENTS.md describes the layout and the conventions. `js/themes.js` is generated from
+AGENTS.md describes the layout and the conventions. There is no bundler: the dev server serves the files as they are,
+and the libraries from `node_modules` at `vendor/<name>@<version>/`, the paths the build copies them to. The service
+worker keeps the release it installed, so with `npm start` a change shows after the next reload brings the new release
+in (or with *Update on reload* in the browser's developer tools). After changing a library's version, run
+`npm run vendor`: it writes the versions into `index.html` (the import map and the font stylesheets); the dev server
+and the build refuse to start until they match `node_modules`. `js/themes.js` is generated from
 [Material Theme UI Lite](https://github.com/AtomMaterialUI/material-theme-ui-lite):
 
 ```sh
@@ -132,12 +141,13 @@ npm run themes -- /tmp/mtui
 ## Deploy
 
 [jetdiff.com](https://jetdiff.com) is a Cloudflare Worker with static assets (`wrangler.jsonc`, `worker/index.js`):
-`npm run build` copies the files the site serves into `dist/`, and `npm run deploy` builds and deploys them with
-wrangler. GitHub Actions deploys `main` after the tests pass (`.github/workflows/ci.yml`), with the repository
+`npm run build` copies the files the site serves into `dist/` (the libraries into `dist/vendor/`, about 700 files and
+24 MiB in all, and `sw.js` with a release id: a hash of the app's files), and `npm run deploy` builds and deploys
+them with wrangler. GitHub Actions deploys `main` after the tests pass (`.github/workflows/ci.yml`), with the repository
 secrets `CLOUDFLARE_API_TOKEN` (an account token with *Individual Workers Editor* on the jetdiff Worker only) and
 `CLOUDFLARE_ACCOUNT_ID`, and optionally `APP_CLIENT_SECRET` to update the GitHub App's client secret. The domains are
 attached to the Worker in the Cloudflare dashboard, so the token needs no zone or DNS rights. The Worker runs first on each request for request logs, the `www` redirect and a few security headers.
-Any static host works too: serve the files listed in `tools/build.mjs`, with `404.html` for missing paths.
+Any static host works too: serve `dist/` after `npm run build`, with `404.html` for missing paths.
 
 Sign in with GitHub needs the Worker and a GitHub App (`worker/auth.js`): create the app with the callback URL
 `https://<your domain>/auth/callback`, *Expire user authorization tokens* on, no webhook, and the repository

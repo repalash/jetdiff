@@ -1,68 +1,192 @@
+// The offline app, updated a whole release at a time. At install, a release's files are fetched together into their
+// own cache (jd-shell-<release>), and the worker takes over only once all of them have arrived. A page then keeps the
+// release it was loaded with until it reloads (js/update.js tells it a new one is ready), so it never mixes the files
+// of two releases. The libraries (vendor/<name>@<version>/…) never change at a URL: they are kept once, in jd-libs,
+// those the page starts with at install and the others (grammars) when first used.
 // The page keeps file contents at a commit (jd-contents-v1), snapshot files (jd-snap) and packs (jd-pack) itself; this
-// worker keeps the app's own files and pages, its libraries and the GitHub API responses (not branch refs).
+// worker also keeps the GitHub API responses (not branch refs) and avatars.
 
-const VERSION = 'v7'
-const SHELL = 'jd-shell-' + VERSION
+// The release: written by tools/site.mjs where the site is served or built (npm start, npm run build)
+const RELEASE = 'unbuilt'
+const SHELL_FILES = []
+const LIB_FILES = []
+
+const SHELL = 'jd-shell-'
+const CURRENT = SHELL + RELEASE
 const LIBS = 'jd-libs'
 const API = 'jd-api'
-const KEEP = [SHELL, LIBS, API, 'jd-contents-v1', 'jd-pack', 'jd-snap']
-
-const SHELL_FILES = [
-    './', './index.html', './404.html', './style.css', './manifest.webmanifest', './docs/hero.webp', './docs/phone.webp',
-    './js/main.js', './js/github.js', './js/editor.js', './js/themes.js', './js/sbs.js', './js/tree.js', './js/icons.js',
-    './js/log.js', './js/palette.js', './js/markdown.js', './js/tooltip.js', './js/offline.js', './js/monaco-worker.js', './js/util.js',
-    './icons/icon.svg', './icons/icon-small.svg', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
-]
-// libraries at fixed versions, fonts and avatars: they never change
-const LIB_HOSTS = new Set([
-    'cdn.jsdelivr.net', 'esm.sh', 'fonts.googleapis.com', 'fonts.gstatic.com', 'avatars.githubusercontent.com',
-])
+const KEEP = [LIBS, API, 'jd-contents-v1', 'jd-pack', 'jd-snap']
+// avatars never change at a URL either
+const LIB_HOSTS = new Set(['avatars.githubusercontent.com'])
+// where the libraries came from before the site served them
+const OLD_LIB_HOSTS = new Set(['cdn.jsdelivr.net', 'esm.sh', 'fonts.googleapis.com', 'fonts.gstatic.com'])
 const OFFLINE_HEADERS = {'x-jd-offline': '1', 'access-control-expose-headers': 'x-jd-offline'}
 
-self.addEventListener('install', (e) => {
-    e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()))
-})
+const scoped = (f) => new URL(f, self.registration.scope).href
+
+self.addEventListener('install', (e) => e.waitUntil(install()))
+
+async function install() {
+    const shell = await caches.open(CURRENT)
+    await shell.addAll(SHELL_FILES.map((f) => new Request(f, {cache: 'no-cache'})))
+    const libs = await caches.open(LIBS)
+    await Promise.all(LIB_FILES.map(async (f) => {
+        if (await libs.match(f)) return
+        const res = await fetch(f)
+        if (!res.ok) throw new Error(`${f}: ${res.status}`)
+        await libs.put(f, res)
+    }))
+    // a deploy during the install can have mixed two releases: kept only if this one is still the one served
+    const live = await (await fetch(self.location.href, {cache: 'no-store'})).text()
+    if (!live.includes(`const RELEASE = '${RELEASE}'`)) {
+        await caches.delete(CURRENT)
+        throw new Error('A newer release arrived during the install')
+    }
+    await self.skipWaiting()
+}
 
 self.addEventListener('activate', (e) => {
     e.waitUntil((async () => {
-        for (const k of await caches.keys()) if (k.startsWith('jd-') && !KEEP.includes(k)) await caches.delete(k)
-        // kept by earlier versions: snapshot files and packs (the page keeps those), and opaque avatars (~7 MB of quota
-        // each; the libraries are replaced as they are used)
-        const shellCache = await caches.open(SHELL)
-        for (const req of await shellCache.keys()) if (!appPaths().has(new URL(req.url).pathname)) await shellCache.delete(req)
+        for (const k of await caches.keys()) if (k.startsWith('jd-') && !k.startsWith(SHELL) && !KEEP.includes(k)) await caches.delete(k)
+        // the libraries from before they came from the site, and opaque avatars kept by earlier versions (~7 MB of
+        // quota each; replaced as they are used)
         const libs = await caches.open(LIBS)
         for (const req of await libs.keys()) {
-            if (new URL(req.url).host === 'avatars.githubusercontent.com' && (await libs.match(req))?.type === 'opaque') await libs.delete(req)
+            const host = new URL(req.url).host
+            if (OLD_LIB_HOSTS.has(host) || LIB_HOSTS.has(host) && (await libs.match(req))?.type === 'opaque') await libs.delete(req)
+        }
+        // a page loaded before a worker controlled it has the release just installed (or one no longer known)
+        const current = await caches.open(CURRENT)
+        for (const c of await self.clients.matchAll({includeUncontrolled: true})) {
+            if (await releaseOf(c.id) === CURRENT) await current.put(clientKey(c.id), new Response(''))
         }
         await self.clients.claim()
+        await prune()
     })())
 })
 
+// The release each page was loaded with: kept in that release's cache too, as this worker can be stopped and started
+// again while the page stays open
+const releases = new Map() // client id -> cache name
+const clientKey = (id) => `https://client.jd/${encodeURIComponent(id)}`
+const clientOf = (url) => url.startsWith('https://client.jd/') ? decodeURIComponent(url.slice('https://client.jd/'.length)) : null
+
+async function releaseOf(id) {
+    if (!id) return CURRENT
+    if (!releases.has(id)) {
+        let name = CURRENT
+        for (const k of await caches.keys()) {
+            if (k.startsWith(SHELL) && await caches.match(clientKey(id), {cacheName: k})) { name = k; break }
+        }
+        releases.set(id, name)
+    }
+    return releases.get(id)
+}
+
+// set when a page loads: the page it replaces (a reload) is gone by the time the new one asks for its files
+let pruneDue = false
+
+function remember(e) {
+    const id = e.resultingClientId
+    if (!id) return
+    releases.set(id, CURRENT)
+    pruneDue = true
+    e.waitUntil(caches.open(CURRENT).then((c) => c.put(clientKey(id), new Response(''))).catch(() => {}))
+}
+
+// An older release's cache stays while a page uses it. The newest one's pages are not looked at: one being loaded is
+// not listed among the clients yet.
+async function prune() {
+    const open = new Set((await self.clients.matchAll({includeUncontrolled: true})).map((c) => c.id))
+    for (const name of await caches.keys()) {
+        if (!name.startsWith(SHELL) || name === CURRENT) continue
+        const cache = await caches.open(name)
+        let used = false
+        for (const req of await cache.keys()) {
+            const id = clientOf(req.url)
+            if (id === null) continue
+            if (open.has(id)) used = true
+            else await cache.delete(req)
+        }
+        if (!used) await caches.delete(name)
+    }
+}
+
 let paths
 const appPaths = () => paths ??= new Set(SHELL_FILES.map((f) => new URL(f, self.registration.scope).pathname))
-
-/** The app's own files, and its pages (a GitHub-style path is one: 404.html turns it into the app's URL). */
-function isApp(req, url) {
-    const scope = new URL('./', self.registration.scope).pathname
-    if (!url.pathname.startsWith(scope) || url.pathname.startsWith(scope + 'auth/')) return false
-    return req.mode === 'navigate' ? !/\.(zip|json)$/i.test(url.pathname) : appPaths().has(url.pathname)
-}
 
 self.addEventListener('fetch', (e) => {
     const req = e.request
     if (req.method !== 'GET') return
     const url = new URL(req.url)
     if (url.origin === location.origin) {
-        if (isApp(req, url)) e.respondWith(shell(req))
+        const scope = new URL(self.registration.scope).pathname
+        if (!url.pathname.startsWith(scope) || url.pathname.startsWith(scope + 'auth/')) return
+        // snapshot files and packs are kept by the page
+        if (req.mode === 'navigate') { if (!/\.(zip|json)$/i.test(url.pathname)) e.respondWith(page(e)) }
+        else if (url.pathname.startsWith(scope + 'vendor/')) e.respondWith(lib(e))
+        else if (appPaths().has(url.pathname)) e.respondWith(shell(e))
     } else if (url.host === 'api.github.com') {
         // raw file contents are cached by the page; a branch ref is never answered from a saved copy, as commits are
         // checked against it
         if (!(req.headers.get('accept') || '').includes('raw') && !/\/git\/refs?\//.test(url.pathname)) e.respondWith(api(req))
-    } else if (LIB_HOSTS.has(url.host) && !url.pathname.endsWith('.zip')) {
-        // offline packs are imported into their own cache: not kept twice
+    } else if (LIB_HOSTS.has(url.host)) {
         e.respondWith(lib(e))
     }
 })
+
+// A page: the newest release's. A path that is not one of its pages is asked of the server, which knows whether it is
+// a file (an image, robots.txt) or a GitHub-style path (/owner/repo/pull/1), which 404.html turns into the app's URL.
+async function page(e) {
+    const req = e.request
+    let hit = await caches.match(stripQuery(req), {cacheName: CURRENT})
+    if (!hit) {
+        let res = null
+        try { res = await fetch(req) } catch { /* offline */ }
+        if (res && res.status !== 404) return res
+        hit = await caches.match(scoped('./404.html'), {cacheName: CURRENT})
+        if (!hit) return res || Response.error()
+    }
+    remember(e)
+    // a new Response keeps the requested URL (a saved one would carry the URL it was saved under)
+    return new Response(hit.body, {status: hit.status, statusText: hit.statusText, headers: hit.headers})
+}
+
+// one of the app's files, from the release of the page that asks
+async function shell(e) {
+    if (pruneDue) {
+        pruneDue = false
+        e.waitUntil(prune().catch(() => {}))
+    }
+    const hit = await caches.match(e.request, {cacheName: await releaseOf(e.clientId), ignoreSearch: true})
+    return hit || fetch(e.request)
+}
+
+// `index.html?pr=…` and `./?pr=…` are the same page
+function stripQuery(req) {
+    const u = new URL(req.url)
+    if (!u.pathname.endsWith('/') && !u.pathname.endsWith('.html')) return req
+    u.search = ''
+    return new Request(u.href)
+}
+
+// An opaque answer (a script, stylesheet or image asked for without CORS) costs ~7 MB of quota whatever its size, so it
+// is never kept: avatars allow CORS, and the worker asks with it. A copy kept opaque by an earlier version is replaced
+// while online.
+async function lib(e) {
+    const req = e.request
+    const cache = await caches.open(LIBS)
+    const hit = await cache.match(req)
+    if (hit && hit.type !== 'opaque') return hit
+    let res
+    try {
+        res = await fetch(req.mode === 'no-cors' ? new Request(req.url, {mode: 'cors', credentials: 'omit'}) : req)
+    } catch {
+        return hit || fetch(req)
+    }
+    if (res.ok) e.waitUntil(cache.put(req, res.clone()).catch(() => {}))
+    return res
+}
 
 const timeout = (ms) => new Promise((r) => setTimeout(() => r('timeout'), ms))
 
@@ -88,47 +212,6 @@ function unsaved(res) {
     h.set('x-jd-unsaved', 'quota')
     h.set('access-control-expose-headers', [h.get('access-control-expose-headers'), 'x-jd-unsaved'].filter(Boolean).join(', '))
     return new Response(res.body, {status: res.status, statusText: res.statusText, headers: h})
-}
-
-// fresh from the network within 3 s, so updates arrive; else the saved copy
-async function shell(req) {
-    const cache = await caches.open(SHELL)
-    const {res, saved} = fetchAndSave(req, cache, stripQuery(req))
-    const first = await Promise.race([res.catch(() => null), timeout(3000)])
-    // only a good answer wins over the saved copy (a dead tunnel or proxy answers with an error page)
-    if (first && first !== 'timeout' && first.ok) return saved
-    const hit = await cache.match(stripQuery(req)) || await cache.match(req, {ignoreSearch: true})
-        // a GitHub-style path (/owner/repo/pull/1): 404.html turns it into the app's URL
-        || req.mode === 'navigate' && await cache.match(new URL('./404.html', self.registration.scope).href)
-    // a new Response keeps the requested URL (a saved one would carry the URL it was saved under)
-    if (hit) return new Response(hit.body, {status: hit.status, statusText: hit.statusText, headers: hit.headers})
-    return first && first !== 'timeout' ? first : saved
-}
-
-// `index.html?pr=…` and `./?pr=…` are the same page
-function stripQuery(req) {
-    const u = new URL(req.url)
-    if (!u.pathname.endsWith('/') && !u.pathname.endsWith('.html')) return req
-    u.search = ''
-    return new Request(u.href)
-}
-
-// An opaque answer (a script, stylesheet or image asked for without CORS) costs ~7 MB of quota whatever its size, so it
-// is never kept: these hosts allow CORS, and the worker asks with it. A copy kept opaque by an earlier version is
-// replaced while online.
-async function lib(e) {
-    const req = e.request
-    const cache = await caches.open(LIBS)
-    const hit = await cache.match(req)
-    if (hit && hit.type !== 'opaque') return hit
-    let res
-    try {
-        res = await fetch(req.mode === 'no-cors' ? new Request(req.url, {mode: 'cors', credentials: 'omit'}) : req)
-    } catch {
-        return hit || fetch(req)
-    }
-    if (res.ok) e.waitUntil(cache.put(req, res.clone()).catch(() => {}))
-    return res
 }
 
 // one URL can answer as JSON or with HTML bodies, by the Accept header

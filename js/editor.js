@@ -1,11 +1,13 @@
 import {THEMES} from './themes.js'
 
-const MONACO_VERSION = '0.52.2' // also in monaco-worker.js
-const MONACO_BASE = `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min`
-// Workers cannot be created cross-origin: one of the page's own origin imports the CDN worker (and works offline)
-const WORKER_URL = new URL(`./monaco-worker.js?v=${MONACO_VERSION}`, import.meta.url).href
-const SHIKI = 'https://esm.sh/shiki@4.6.0'
-const SHIKI_THEMES = 'https://esm.sh/@shikijs/themes@4.6.0'
+// The libraries come from the site, at the versions index.html's import map names (tools/site.mjs copies them)
+const MONACO_BASE = import.meta.resolve('monaco-editor/min/vs')
+// Monaco's worker finds the rest of Monaco from its own URL
+const WORKER_URL = `${MONACO_BASE}/base/worker/workerMain.js`
+// Shiki's grammars and themes are imported by file: its own loaders name them without the extension, which only a
+// bundler resolves
+const grammar = (id) => import(`@shikijs/langs/dist/${id}.mjs`)
+const shikiTheme = (id) => import(`@shikijs/themes/dist/${id}.mjs`)
 
 export {THEMES}
 export const DEFAULT_THEME = 'material-darker'
@@ -66,8 +68,8 @@ function loadScript(src) {
 export function loadMonaco() {
     return monacoReady ??= (async () => {
         const shikiReady = loadShiki()
-        await loadScript(`${MONACO_BASE}/vs/loader.js`)
-        window.require.config({paths: {vs: `${MONACO_BASE}/vs`}})
+        await loadScript(`${MONACO_BASE}/loader.js`)
+        window.require.config({paths: {vs: MONACO_BASE}})
         window.MonacoEnvironment = {getWorkerUrl: () => WORKER_URL}
         const monaco = await new Promise((resolve, reject) => window.require(['vs/editor/editor.main'], () => resolve(window.monaco), reject))
         await shikiReady
@@ -78,11 +80,12 @@ export function loadMonaco() {
 }
 
 async function loadShiki() {
-    const [{createHighlighter, bundledLanguagesInfo}, {createJavaScriptRegexEngine}] = await Promise.all([
-        import(SHIKI),
-        import(`${SHIKI}/engine/javascript`),
+    const [{createHighlighterCore}, {createJavaScriptRegexEngine}, {bundledLanguagesInfo}] = await Promise.all([
+        import('shiki/core'),
+        import('shiki/engine/javascript'),
+        import('shiki/langs'),
     ])
-    highlighter = await createHighlighter({
+    highlighter = await createHighlighterCore({
         themes: [],
         langs: [],
         engine: createJavaScriptRegexEngine({forgiving: true}),
@@ -93,13 +96,23 @@ async function loadShiki() {
     }
 }
 
+// Shiki's own languages, which have no grammar
+const PLAIN = new Set(['plaintext', 'txt', 'text', 'plain', 'ansi'])
+
+// a bundled language's id (an alias names one); anything else has no grammar file to import
+function loadLanguage(id) {
+    if (PLAIN.has(id)) return highlighter.loadLanguage(id)
+    if (aliases.get(id) !== id) throw new Error(`No grammar for ${id}`)
+    return highlighter.loadLanguage(grammar(id))
+}
+
 const hex = (c) => (c || '').replace('#', '').slice(0, 6)
 
 const baseThemes = {}
 // Shiki's Material theme colors the scopes the IDE scheme does not map
 function baseTheme(dark) {
     const id = dark ? 'material-theme-darker' : 'material-theme-lighter'
-    return baseThemes[id] ??= import(`${SHIKI_THEMES}/${id}`).then((m) => m.default)
+    return baseThemes[id] ??= shikiTheme(id).then((m) => m.default)
 }
 
 export function themeById(id) {
@@ -245,7 +258,7 @@ export async function ensureLanguage(monaco, id) {
     if (registered.has(id)) return registered.get(id)
     const monId = 'jd-' + id
     try {
-        await highlighter.loadLanguage(id)
+        await loadLanguage(id)
     } catch (e) {
         console.warn('No grammar for', id, e)
         registered.set(id, 'plaintext')
@@ -281,18 +294,15 @@ export async function highlightCode(code, lang) {
     const l = String(lang).toLowerCase()
     const id = aliases.get(l) || EXT[l] || l
     try {
-        if (!highlighter.getLoadedLanguages().includes(id)) await highlighter.loadLanguage(id)
+        if (!highlighter.getLoadedLanguages().includes(id)) await loadLanguage(id)
         return highlighter.codeToHtml(code, {lang: id, theme: MONACO_THEME})
     } catch {
         return null
     }
 }
 
-/** Loads both base themes and the grammars of `languages`, and fetches Monaco's lazy files, for offline use. */
+/** Loads both base themes and the grammars of `languages`, for offline use (sw.js keeps the rest of the libraries). */
 export async function preloadForOffline(monaco, languages) {
-    // the worker, the codicon font: Monaco fetches them only when first needed, so the service worker has no copy yet
-    const files = [WORKER_URL, `${MONACO_BASE}/vs/base/worker/workerMain.js`,
-        `${MONACO_BASE}/vs/base/browser/ui/codicons/codicon/codicon.ttf`]
-    await Promise.all([baseTheme(true), baseTheme(false), ...files.map((u) => fetch(u).catch(() => {}))])
+    await Promise.all([baseTheme(true), baseTheme(false)])
     for (const id of new Set(languages)) await ensureLanguage(monaco, id).catch(() => {})
 }

@@ -227,7 +227,7 @@ test.describe('with the service worker', () => {
             return Promise.all((await c.keys()).map(async (k) => [new URL(k.url).host, (await c.match(k)).type]))
         })
         expect(kept.filter(([host]) => host === 'avatars.githubusercontent.com').length).toBeGreaterThan(0)
-        expect(kept.filter(([host]) => host === 'cdn.jsdelivr.net').length).toBeGreaterThan(0)
+        expect(kept.filter(([host]) => host === new URL(page.url()).host).length).toBeGreaterThan(0)
         expect(kept.filter(([, type]) => type === 'opaque')).toEqual([])
     })
 

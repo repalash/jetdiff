@@ -1,7 +1,5 @@
 import {highlightCode} from './editor.js'
 
-const MD_IT = 'https://esm.sh/markdown-it@14.1.0'
-const PURIFY = 'https://esm.sh/dompurify@3.2.4'
 // what GitHub strips from Markdown too: no restyling the app, no forms, no frames; ids get GitHub's user-content- prefix
 const PURIFY_OPTIONS = {
     ADD_ATTR: ['target'],
@@ -24,7 +22,7 @@ const template = (html) => {
 
 let libs
 export function loadMarkdown() {
-    libs ??= Promise.all([import(MD_IT), import(PURIFY)]).then(([m, p]) => {
+    libs ??= Promise.all([import('markdown-it'), import('dompurify')]).then(([m, p]) => {
         const md = new m.default({html: true, linkify: true})
         // the rich diff's marks must not end up inside a link address (encoded or punycoded); they stay in the text
         const normalize = md.normalizeLink.bind(md)

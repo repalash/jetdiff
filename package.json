@@ -11,9 +11,19 @@
     "deploy": "npx wrangler@4.158.0 deploy",
     "record": "node tools/record-snapshot.cjs",
     "pack": "python3 tools/make-pack.py",
-    "themes": "node tools/material-themes.mjs"
+    "themes": "node tools/material-themes.mjs",
+    "vendor": "node tools/site.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"
+  },
+  "dependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "dompurify": "3.2.4",
+    "fflate": "0.8.2",
+    "markdown-it": "14.1.0",
+    "monaco-editor": "0.52.2",
+    "shiki": "4.6.0"
   }
 }
