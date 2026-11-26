@@ -1,4 +1,4 @@
-import {DIFF_COLORS, EDITOR_COLORS, fullWidthSelection} from './editor.js'
+import {DIFF_COLORS, EDITOR_COLORS, fullWidthSelection, HOVER} from './editor.js'
 
 /**
  * Monaco line changes (1-based, `*EndLineNumber` 0 for an empty side) as 0-based half-open ranges
@@ -91,7 +91,7 @@ export class SideBySideViewer {
             automaticLayout: true,
             wordWrap: 'off',
             links: false,
-            hover: {enabled: false},
+            hover: HOVER,
             codeLens: false,
             quickSuggestions: false,
             renderValidationDecorations: 'off',

@@ -1,10 +1,10 @@
 import {
     accountIdentity, answerSnapshot, authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
-    otherSite, PACK_ANSWER, paramsToTarget, parseTarget, listPullRequests, searchMyPullRequests, setFileViewed, setSnapshot, setToken, snapshotInfo, snapshotName, snapshotRepos,
+    otherSite, PACK_ANSWER, paramsToTarget, parseTarget, listPullRequests, searchCode, searchMyPullRequests, setFileViewed, setSnapshot, setToken, snapshotInfo, snapshotName, snapshotRepos,
     snapshotToAsk, targetToParams,
 } from './github.js'
 import {
-    applyTheme, applyThemeCss, DEFAULT_THEME, ensureLanguage, fullWidthSelection, languageForPath, languageName, loadMonaco,
+    applyTheme, applyThemeCss, DEFAULT_THEME, ensureLanguage, fullWidthSelection, HOVER, languageForPath, languageName, loadMonaco,
     MONACO_THEME, themeById, THEMES, DIFF_COLORS,
 } from './editor.js'
 import {SideBySideViewer} from './sbs.js'
@@ -16,6 +16,10 @@ import {installTooltips} from './tooltip.js'
 import {onAppUpdate} from './update.js'
 import {appOffline, clearOffline, downloadRepo, hasSavedData, importPack, offlineRepos, removeRepo, storageUse} from './offline.js'
 import {highlightBlocks, renderMarkdown, repoResolvers, richSource, sanitize} from './markdown.js'
+import {BACK, DECLARATION, DEFAULT_KEYMAP, FORWARD, KEYMAPS, registerAppCommands, setKeymap, shortcut} from './keymap.js'
+import {attachGoTo, chooseDeclaration, choosing, nameAt} from './goto.js'
+import {familyOf, findDeclarations} from './declarations.js'
+import {addRoot, dropRoot, registerHover, TS_LANGUAGES, tsDefinitions} from './typescript.js'
 import {baseName, esc, firstLine, githubUrl, plural, shortSha as short} from './util.js'
 
 const $ = (s, el = document) => el.querySelector(s)
@@ -65,6 +69,7 @@ const settings = {
     wordWrap: store.get('wordWrap', false),
     mdPreview: store.get('mdPreview', true),
     fontSize: store.get('fontSize', null),
+    keymap: store.get('keymap', DEFAULT_KEYMAP), // the editors' keys: 'jetbrains' | 'vscode' (keymap.js)
 }
 const viewMode = () => settings.view || (mobileQuery.matches ? 'unified' : 'sbs')
 /** 'sbs': the IDE-style side-by-side viewer; 'monaco': Monaco's diff editor (unified, or aligned side-by-side). */
@@ -443,6 +448,9 @@ const state = {
     editing: false, // edit mode: the right side (the PR head) is editable
     editableFile: false,
     pristine: null, // the open file's text at the head
+    back: [], // Go to Declaration's locations to go back to, and forward again
+    forward: [],
+    outside: null, // the file shown outside the changes (Go to Declaration): its location, with its language
 }
 
 const currentFile = () => state.order[state.index]
@@ -598,6 +606,8 @@ async function ensureMonaco() {
     if (!state.monaco) {
         const monaco = await loadMonaco()
         await applyTheme(monaco, themeById(settings.theme))
+        registerAppCommands(monaco, {[DECLARATION]: () => goToDeclaration(), [BACK]: () => goBack(-1), [FORWARD]: () => goBack(1)})
+        setKeymap(monaco, settings.keymap)
         state.monaco = monaco
     }
     return state.monaco
@@ -718,6 +728,7 @@ function buildShell() {
                         <div class="uni-ed" id="uni-ed"></div>
                     </div>
                     <div class="view view-md" id="view-md"></div>
+                    <div class="view" id="view-file"></div>
                     <div class="view view-msg" id="view-msg"></div>
                     <div class="loading-bar" id="loading-bar"></div>
                 </div>
@@ -1032,12 +1043,15 @@ function appMenu(anchor) {
         {label: 'Decrease Font Size', hint: `${MOD}−`, keepOpen: true, action: () => { changeFont(-1); appMenu(anchor) }},
         {label: 'Reset Font Size', hint: `${MOD}0`, action: () => changeFont(0)},
         '-',
+        {html: 'Keymap <span class="dim">(editor keys)</span>'},
+        ...Object.entries(KEYMAPS).map(([k, name]) => ({label: name, checked: settings.keymap === k, action: () => setKeymapSetting(k)})),
+        '-',
         {html: 'GitHub'},
         {label: `${icons.lock} ${signedIn() ? 'Signed in with GitHub…' : getToken() ? 'Token saved: change or remove…' : 'Sign In or Add a Token…'}`, action: tokenDialog},
         OPEN_ANOTHER_ITEM,
         {label: `${icons.download} Offline: Download and Saved Data…`, action: offlineDialog},
         '-',
-        {label: `Double Shift: Search Everywhere · F7 / ⇧F7: differences · Alt+→ / Alt+←: files · V: viewed`, disabled: true},
+        {label: `Double Shift: Search Everywhere · F7 / ⇧F7: differences · Alt+→ / Alt+←: files · V: viewed · ${shortcut(settings.keymap, DECLARATION)}, ${MOD}click: declaration`, disabled: true},
     ], {align: 'right'})
 }
 
@@ -1061,6 +1075,12 @@ function openOnGitHubItems() {
         if (w) w.location = `${githubUrl(cs.htmlUrl)}${fullPr(cs) ? '/files' : ''}#diff-${hash}`
     }})
     return items
+}
+
+function setKeymapSetting(name) {
+    setSetting('keymap', name)
+    if (state.monaco) setKeymap(state.monaco, name)
+    toast(`Keymap: ${KEYMAPS[name]}`, 'info', 1200)
 }
 
 /** Changes the editor's text size only; 0 resets it. */
@@ -1087,7 +1107,10 @@ async function setThemeId(id) {
         await applyTheme(state.monaco, theme)
         state.sbs?.draw()
         // the open file's models were tokenized with the old theme
-        reopenFile(true)
+        if (isShown('file')) {
+            const at = state.fileEd.getPosition()
+            showOutside({...state.outside, line: at.lineNumber, column: at.column})
+        } else reopenFile(true)
     }
     toast(theme.name, 'info', 1200)
 }
@@ -1307,6 +1330,12 @@ async function openFileAt(i, push = true, keepScroll = false) {
     state.pristine = modelText(modified)
     if (edited) modified.setValue(state.edits.get(f.path))
     state.models = [original, modified]
+    if (TS_LANGUAGES.has(languageForPath(f.path))) {
+        const {owner, repo} = state.target
+        if (cs.baseSha) addRoot(original.uri, {owner, repo, ref: cs.baseSha})
+        addRoot(modified.uri, {owner, repo, ref: cs.headSha})
+        registerHover(monaco, lang)
+    }
     if (state.editableFile) modified.onDidChangeContent(() => onEdited(f, original, modified, id))
     // tokenize up front: deleted lines in the unified view otherwise can render before their colors exist
     for (const m of state.models) if (m.getLineCount() < 20000) m.tokenization.forceTokenization(m.getLineCount())
@@ -1351,7 +1380,7 @@ async function openFileAt(i, push = true, keepScroll = false) {
         state.tooLarge = true
         return showMessage(`The diff of ${esc(f.path)} is too large to compute<div class="dim small">No result in ${(DIFF_TIME + DIFF_GRACE) / 1000} s</div>`)
     } finally {
-        old.forEach((m) => setTimeout(() => m.dispose(), 0))
+        old.forEach((m) => setTimeout(() => { dropRoot(monaco, m.uri); m.dispose() }, 0))
     }
     setLoading(false)
     applyEditable()
@@ -2515,6 +2544,8 @@ function ensureSbs() {
         state.sbs = new SideBySideViewer($('#view-sbs'), state.monaco, {fontSize: fontSize(), lineHeight: lineHeight(), fontFamily: FONT})
         state.sbs.onScroll = () => updateToolbar()
         state.sbs.setOptions({syncScroll: settings.syncScroll, highlight: settings.highlight})
+        attachEditor(state.sbs.left)
+        attachEditor(state.sbs.right)
     }
     return state.sbs
 }
@@ -2554,7 +2585,7 @@ function ensureUnified() {
             fontFamily: FONT,
             fontLigatures: false,
             contextmenu: false,
-            hover: {enabled: false},
+            hover: HOVER,
             occurrencesHighlight: 'off',
             selectionHighlight: false,
             matchBrackets: 'never',
@@ -2569,8 +2600,268 @@ function ensureUnified() {
         state.unified.getModifiedEditor().onDidScrollChange(() => updateToolbar())
         fullWidthSelection(state.monaco, state.unified.getModifiedEditor())
         fullWidthSelection(state.monaco, state.unified.getOriginalEditor())
+        attachEditor(state.unified.getOriginalEditor())
+        attachEditor(state.unified.getModifiedEditor())
     }
     return state.unified
+}
+
+// Go to Declaration: the TS service for TypeScript and JavaScript, else the declarations found in the changed files
+// (both sides), else GitHub's code search in the repository. A location: {path, side, ref, line, column, text}, `side`
+// 'base' or 'head' of a changed file, or 'outside' for a file shown on its own (`lib` and `text` for TypeScript's).
+
+/** The editors Go to Declaration works in. */
+const editors = new Set()
+
+function attachEditor(ed) {
+    editors.add(ed)
+    attachGoTo(state.monaco, ed, goToDeclaration)
+    ed.onDidFocusEditorText(() => { state.lastEditor = ed })
+}
+
+/** The editor with the focus, else the last one that had it. */
+const focusedEditor = () => [...editors].find((ed) => ed.hasTextFocus()) || state.lastEditor || null
+
+/** What an editor shows: {path, side, ref, lang, lib?}, or null. */
+function editorContext(ed) {
+    if (ed === state.fileEd) return state.outside && {...state.outside}
+    const f = currentFile(), cs = state.cs
+    if (!f || !cs) return null
+    const lang = languageForPath(f.path)
+    if (ed === state.sbs?.left || ed === state.unified?.getOriginalEditor()) return {path: f.prevPath || f.path, side: 'base', ref: cs.baseSha, lang}
+    if (ed === state.sbs?.right || ed === state.unified?.getModifiedEditor()) return {path: f.path, side: 'head', ref: cs.headSha, lang}
+    return null
+}
+
+function locationIn(ed) {
+    const ctx = ed && editorContext(ed), p = ed?.getPosition()
+    return ctx && p ? {...ctx, line: p.lineNumber, column: p.column} : null
+}
+
+/** A location in the repository at `ref`: a changed file's side when the changes have that file at `ref`. */
+function locationOf(path, ref, line, column, text) {
+    const cs = state.cs
+    const changed = ref === cs.headSha ? state.order.some((f) => f.path === path && f.status !== 'removed')
+        : ref === cs.baseSha && state.order.some((f) => (f.prevPath || f.path) === path && f.status !== 'added')
+    return {path, side: changed ? (ref === cs.headSha ? 'head' : 'base') : 'outside', ref, line, column, text}
+}
+
+class NoAccess extends Error {}
+
+async function goToDeclaration(ed = focusedEditor(), position = ed?.getPosition()) {
+    const ctx = ed && editorContext(ed), w = position && nameAt(ed, position)
+    if (!ctx || !w) return
+    const id = state.declId = (state.declId || 0) + 1
+    const from = {...ctx, line: position.lineNumber, column: position.column}
+    let found
+    try {
+        found = await declarationsOf(ed.getModel(), position, w.word, ctx)
+    } catch (e) {
+        if (id !== state.declId) return
+        if (e instanceof NoAccess) return toast(e.message, 'error', 8000, {label: 'Sign In…', run: tokenDialog})
+        if (e.retryAt) return toast(`GitHub's code search allows 10 searches a minute: try again in ${Math.max(1, Math.ceil((e.retryAt - Date.now()) / 1000))} s`, 'error', 8000)
+        return toast(`Could not search ${repoName(state.target)} for ${w.word}: ${e.message}`, 'error', 8000)
+    }
+    if (id !== state.declId || !ed.getModel()) return
+    if (!found.length) return toast(`Cannot find the declaration of ${w.word}`, 'info', 3000)
+    if (found.length === 1) return jumpTo(found[0], from)
+    const note = (r) => r.side === 'base' ? 'old' : r.side === 'outside' ? (r.lib ? 'TypeScript' : 'not changed') : ''
+    chooseDeclaration(ed, position, w.word, found.map((r) => ({...r, path: r.lib || r.path, text: r.preview ?? r.text, note: note(r)})), (r) => jumpTo(found[r.i], from))
+}
+
+async function declarationsOf(model, position, word, ctx) {
+    if (TS_LANGUAGES.has(ctx.lang) && !ctx.lib) {
+        const ts = await tsDefinitions(state.monaco, model, position).catch((e) => { console.warn('TypeScript service', e); return null })
+        if (ts?.length) return numbered(ts.map((r) => r.lib ? {...r, path: r.lib, side: 'outside'} : locationOf(r.path, r.ref, r.line, r.column, r.text)))
+    }
+    if (ctx.lib) return []
+    const inChanges = await searchChanges(word, ctx)
+    return numbered(inChanges.length ? inChanges : await searchRepository(word, ctx))
+}
+
+const numbered = (list) => list.map((r, i) => ({...r, i}))
+
+// at most this many versions of the changed files are read for one search (those viewed are loaded already)
+const MAX_SEARCHED = 200
+
+/** `word`'s declarations in the changed files of the language family of `ctx`, both sides. */
+async function searchChanges(word, ctx) {
+    const cs = state.cs, open = currentFile()
+    const langs = new Set(familyOf(ctx.lang))
+    const versions = []
+    for (const f of state.order) {
+        if (!langs.has(languageForPath(f.path))) continue
+        if (f.status !== 'removed') versions.push({path: f.path, side: 'head', ref: cs.headSha, model: f === open ? state.models[1] : null})
+        if (f.status !== 'added' && cs.baseSha) versions.push({path: f.prevPath || f.path, side: 'base', ref: cs.baseSha, model: f === open ? state.models[0] : null})
+    }
+    // the file searched from first, then the files nearest to it
+    const near = (p) => {
+        if (p === ctx.path) return 1e6
+        const a = p.split('/'), b = ctx.path.split('/')
+        let n = 0
+        while (n < a.length - 1 && a[n] === b[n]) n++
+        return n
+    }
+    versions.sort((a, b) => near(b.path) - near(a.path))
+    const found = await mapLimit(versions.slice(0, MAX_SEARCHED), 8, async (v) => {
+        // the open file as shown, with its edits
+        const text = v.model && !v.model.isDisposed() ? v.model.getValue() : (await contentOf(v.ref, v.path).catch(() => null))?.text
+        return text ? findDeclarations(text, word, languageForPath(v.path)).map((d) => ({path: v.path, side: v.side, ref: v.ref, ...d})) : []
+    })
+    // a declaration unchanged on both sides shows once, on the side searched from (the new one from elsewhere)
+    const prefer = ctx.side === 'base' ? 'base' : 'head'
+    const out = []
+    for (const r of found.flat()) {
+        const twin = out.findIndex((o) => o.path === r.path && o.text === r.text && o.side !== r.side)
+        if (twin < 0) out.push(r)
+        else if (r.side === prefer) out[twin] = r
+    }
+    return out
+}
+
+/** Runs `fn` on each item, at most `n` at a time; the results in order. */
+async function mapLimit(items, n, fn) {
+    const out = new Array(items.length)
+    let next = 0
+    await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => {
+        while (next < items.length) { const i = next++; out[i] = await fn(items[i]) }
+    }))
+    return out
+}
+
+// the files of a code search read for declarations, those whose matches look like one first
+const MAX_SEARCH_FILES = 10
+
+/** `word`'s declarations in the repository's other files, by GitHub's code search, read at the commit of `ctx`. */
+async function searchRepository(word, ctx) {
+    const t = state.target
+    if (!getToken() && !snapshotName()) throw new NoAccess(`Searching ${repoName(t)} for ${word} needs GitHub access: sign in or add a token`)
+    const langs = new Set(familyOf(ctx.lang))
+    const changed = new Set(state.order.flatMap((f) => [f.path, f.prevPath]))
+    const items = (await searchCode(t.owner, t.repo, word)).filter((it) => langs.has(languageForPath(it.path)) && !changed.has(it.path))
+    const looks = (it) => it.fragments.some((fr) => findDeclarations(fr, word, languageForPath(it.path)).length)
+    items.sort((a, b) => looks(b) - looks(a))
+    const found = await mapLimit(items.slice(0, MAX_SEARCH_FILES), 4, async (it) => {
+        const c = await contentOf(ctx.ref, it.path).catch(() => null)
+        return c?.text ? findDeclarations(c.text, word, languageForPath(it.path)).map((d) => ({path: it.path, side: 'outside', ref: ctx.ref, ...d})) : []
+    })
+    return found.flat()
+}
+
+async function jumpTo(loc, from) {
+    state.back.push(from)
+    state.forward = []
+    await openLocation(loc)
+}
+
+/** Back (-1) to where Go to Declaration started, or forward (1) again. */
+function goBack(dir) {
+    const [from, to] = dir < 0 ? [state.back, state.forward] : [state.forward, state.back]
+    const loc = from.pop()
+    if (!loc) return
+    const here = locationIn(focusedEditor())
+    if (here) to.push(here)
+    openLocation(loc)
+}
+
+async function openLocation(loc) {
+    if (loc.side === 'outside') return showOutside(loc)
+    const i = state.order.findIndex((f) => loc.side === 'head' ? f.path === loc.path && f.status !== 'removed' : (f.prevPath || f.path) === loc.path && f.status !== 'added')
+    if (i < 0) return
+    if (i !== state.index || !(isShown('sbs') || isShown('unified'))) {
+        await openFileAt(i, true, true)
+        if (state.index !== i) return
+    }
+    let ed, line = loc.line
+    if (isShown('sbs')) ed = loc.side === 'base' ? state.sbs.left : state.sbs.right
+    else if (isShown('unified')) {
+        const inline = viewMode() !== 'sbs'
+        ed = loc.side === 'base' && !inline ? state.unified.getOriginalEditor() : state.unified.getModifiedEditor()
+        if (loc.side === 'base' && inline) line = headLine(state.unified.getLineChanges() || [], line)
+    }
+    if (ed) reveal(ed, line, loc.column)
+}
+
+/** The head's line for a base line, through the diff's line changes (a deleted line goes to where it was). */
+function headLine(changes, line) {
+    let delta = 0
+    for (const c of changes) {
+        const o0 = c.originalStartLineNumber, o1 = c.originalEndLineNumber || o0
+        if (line < o0) break
+        if (line <= o1 && c.originalEndLineNumber) return Math.max(1, c.modifiedStartLineNumber)
+        delta = (c.modifiedEndLineNumber || c.modifiedStartLineNumber) - o1
+    }
+    return line + delta
+}
+
+function reveal(ed, lineNumber, column) {
+    const p = {lineNumber, column}
+    ed.setPosition(p)
+    ed.revealPositionInCenterIfOutsideViewport(p)
+    ed.focus()
+}
+
+function ensureFileEditor() {
+    if (!state.fileEd) {
+        $('#view-file').innerHTML = '<div class="sbs-head file-head" id="file-head"></div><div class="file-ed" id="file-ed"></div>'
+        state.fileEd = state.monaco.editor.create($('#file-ed'), {
+            readOnly: true, domReadOnly: true, lineNumbersMinChars: 4, glyphMargin: false, folding: false, lineDecorationsWidth: 14,
+            minimap: {enabled: false}, scrollBeyondLastLine: false, renderLineHighlight: 'none', roundedSelection: false,
+            fontFamily: FONT, fontSize: fontSize(), lineHeight: lineHeight(), fontLigatures: false, overviewRulerBorder: false,
+            hideCursorInOverviewRuler: true, overviewRulerLanes: 0, contextmenu: false, occurrencesHighlight: 'off', selectionHighlight: false,
+            guides: {indentation: false, bracketPairs: false}, stickyScroll: {enabled: false}, matchBrackets: 'never',
+            unicodeHighlight: {ambiguousCharacters: false, invisibleCharacters: false}, automaticLayout: true, links: false,
+            hover: HOVER, quickSuggestions: false, renderValidationDecorations: 'off', cursorBlinking: 'solid', fixedOverflowWidgets: true,
+            scrollbar: {useShadows: false, verticalScrollbarSize: 12, horizontalScrollbarSize: 10, alwaysConsumeMouseWheel: false},
+        })
+        fullWidthSelection(state.monaco, state.fileEd)
+        attachEditor(state.fileEd)
+    }
+    return state.fileEd
+}
+
+let outsideId = 0
+
+/** Shows a file outside the changes on its own, read-only, at the location. */
+async function showOutside(loc) {
+    const id = ++state.fileLoadId
+    const monaco = state.monaco
+    setLoading(true)
+    let text = loc.text
+    if (!loc.lib) {
+        const c = await contentOf(loc.ref, loc.path).catch((e) => ({error: e}))
+        if (id !== state.fileLoadId) return
+        if (c.error || c.binary) {
+            setLoading(false)
+            return toast(`Could not open ${loc.path}: ${c.error ? c.error.message : 'a binary file'}`, 'error')
+        }
+        text = c.text
+    }
+    const lang = loc.lib ? 'typescript' : languageForPath(loc.path)
+    const monLang = await ensureLanguage(monaco, lang)
+    if (id !== state.fileLoadId) return
+    const ed = ensureFileEditor()
+    const old = ed.getModel()
+    const uri = monaco.Uri.from({scheme: 'jd-o', authority: String(++outsideId), path: '/' + loc.path})
+    const model = monaco.editor.createModel(text, monLang, uri)
+    if (TS_LANGUAGES.has(lang) && !loc.lib) {
+        addRoot(uri, {owner: state.target.owner, repo: state.target.repo, ref: loc.ref})
+        registerHover(monaco, monLang)
+    }
+    ed.setModel(model)
+    if (old) { dropRoot(monaco, old.uri); old.dispose() }
+    state.outside = {path: loc.path, side: 'outside', ref: loc.ref, lang, ...loc.lib && {lib: loc.lib, text}}
+    const t = state.target
+    const blob = !loc.lib && `https://github.com/${t.owner}/${t.repo}/blob/${loc.ref}/${loc.path.split('/').map(encodeURIComponent).join('/')}`
+    $('#file-head').innerHTML = `<span class="sbs-head-left">${icons.lock}<span class="sha">${loc.lib ? 'TypeScript' : short(loc.ref)}</span><span class="path">${esc(loc.path)}</span>`
+        + `<span class="tag tag-ro">${loc.lib ? 'library' : fullPr(state.cs) ? 'not changed in this pull request' : 'not in these changes'}</span>`
+        + (blob ? `<a class="file-gh" href="${esc(blob)}" target="_blank" rel="noopener" title="Open on GitHub">${icons.external}</a>` : '') + '</span>'
+    $('#st-lang').innerHTML = `${fileIcon(loc.path)}<span>${esc(languageName(lang))}</span>`
+    $('#st-stat').innerHTML = ''
+    showView('file')
+    setLoading(false)
+    updateToolbar()
+    reveal(ed, loc.line, loc.column)
 }
 
 function applyMonacoOptions() {
@@ -2579,6 +2870,7 @@ function applyMonacoOptions() {
 
 function applyFont() {
     state.sbs?.setFont(fontSize(), lineHeight())
+    state.fileEd?.updateOptions({fontSize: fontSize(), lineHeight: lineHeight()})
     applyMonacoOptions()
 }
 
@@ -2598,7 +2890,8 @@ function applyView() {
 }
 
 function showView(which) {
-    for (const v of ['sbs', 'unified', 'md', 'msg']) $('#view-' + v).classList.toggle('active', v === which)
+    for (const v of ['sbs', 'unified', 'md', 'msg', 'file']) $('#view-' + v).classList.toggle('active', v === which)
+    $('#toolbar').classList.toggle('outside', which === 'file')
     renderViewButtons()
 }
 
@@ -2628,7 +2921,7 @@ function diffInfo() {
         const n = state.mdMarks?.length || 0
         return {count: n, prev: state.mdCur > 0, next: state.mdCur < n - 1}
     }
-    if (!isShown('msg')) {
+    if (!isShown('msg') && !isShown('file')) {
         if (renderer() === 'sbs' && state.sbs) return {count: state.sbs.count, prev: state.sbs.canStep(-1), next: state.sbs.canStep(1)}
         if (renderer() === 'monaco' && state.unified) {
             const n = state.unified.getLineChanges()?.length || 0
@@ -2640,7 +2933,9 @@ function diffInfo() {
 
 function stepDiff(dir) {
     // past the last difference: go on to the next file, as the IDE does on a second F7
-    if (isShown('md')) {
+    if (isShown('file')) {
+        stepFile(dir)
+    } else if (isShown('md')) {
         const next = state.mdCur + dir
         if (next < 0 || next >= (state.mdMarks?.length || 0)) stepFile(dir)
         else markCurrent(next)
@@ -2657,7 +2952,7 @@ function updateToolbar() {
     const d = diffInfo()
     const loading = $('#loading-bar').classList.contains('on')
     const first = state.index <= 0, last = state.index >= state.order.length - 1
-    $('#diff-count').textContent = loading ? '' : state.tooLarge ? 'Too large to compare' : d.count === 0 ? 'No differences' : plural(d.count, 'difference')
+    $('#diff-count').textContent = loading ? '' : isShown('file') ? 'Not in the changes' : state.tooLarge ? 'Too large to compare' : d.count === 0 ? 'No differences' : plural(d.count, 'difference')
     $('#btn-prev-diff').disabled = !d.prev && first
     $('#btn-next-diff').disabled = !d.next && last
     $('#btn-prev-file').disabled = first
@@ -2671,7 +2966,7 @@ function setLoading(on) {
 }
 
 function onKey(e) {
-    if ($('#dialog').open || state.palette?.isOpen) return
+    if ($('#dialog').open || state.palette?.isOpen || choosing()) return
     const k = e.key.toLowerCase()
     const mod = e.metaKey || e.ctrlKey
     // Find Action (Ctrl/⌘+Shift+A), Go to File (Ctrl/⌘+P, Ctrl/⌘+Shift+O), Search Everywhere (Ctrl/⌘+K)
@@ -2690,7 +2985,7 @@ function onKey(e) {
     if (e.key === 'F7') {
         e.preventDefault()
         stepDiff(e.shiftKey ? -1 : 1)
-    } else if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+    } else if (e.altKey && !mod && !e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
         e.preventDefault()
         stepFile(e.key === 'ArrowRight' ? 1 : -1)
     } else if (k === 'v' && !mod && !e.altKey) {
@@ -2732,6 +3027,10 @@ function actionItems() {
         state.cs?.pr && A('View Timeline', () => openTimeline(), {ic: icons.comment}),
         state.edits.size && A('Commit…', () => openCommitPanel(), {ic: icons.commit}),
         state.editableFile && A(state.editing ? 'Stop Editing' : 'Edit File', () => setEditing(!state.editing), {ic: icons.pencil}),
+        A('Go to Declaration', () => goToDeclaration(), {hint: shortcut(s.keymap, DECLARATION), sub: 'the name at the caret'}),
+        A('Back', () => goBack(-1), {hint: shortcut(s.keymap, BACK), ic: icons.left, sub: 'to where Go to Declaration started'}),
+        A('Forward', () => goBack(1), {hint: shortcut(s.keymap, FORWARD), ic: icons.right}),
+        ...Object.entries(KEYMAPS).map(([k, name]) => A(`Keymap: ${name}`, () => setKeymapSetting(k), {toggle: s.keymap === k, sub: 'editor keys'})),
         A('Increase Font Size', () => changeFont(1), {hint: `${MOD}=`, sub: `editor, now ${fontSize()}px`}),
         A('Decrease Font Size', () => changeFont(-1), {hint: `${MOD}−`}),
         A('Reset Font Size', () => changeFont(0), {hint: `${MOD}0`}),

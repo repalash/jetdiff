@@ -40,6 +40,9 @@ test('the pages are served with the policy, and the app runs under it with no vi
     await page.goto(`./?pr=${PR}&file=plugins/cloud/src/auth/CloudAuth.ts`)
     await ready(page)
     await expect(page.locator('.sbs-right .view-lines')).toBeVisible()
+    // the TypeScript service, in its worker from the site
+    await page.locator('.sbs-right .view-line', {hasText: 'export class CloudAuth'}).locator('span span', {hasText: 'CloudAuth'}).first().hover()
+    await expect(page.locator('.monaco-hover:visible')).toContainText('class CloudAuth', {timeout: 20000})
     await page.locator('#btn-unified').click()
     await expect(page.locator('.monaco-diff-editor:visible')).toBeVisible()
     await page.locator('#btn-sbs').click()

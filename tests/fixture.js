@@ -14,7 +14,8 @@ export const recorded = (path) => JSON.parse(fs.readFileSync(new URL(index[path]
 
 /**
  * `github`: api.github.com answered from tests/fixture (threepipe PR 193, recorded with tools/record-snapshot.cjs).
- * Writes are recorded in `github.writes` and answered by `github.handle(fn)` handlers ({raw} for a file's bytes), else refused. `github.alias`
+ * Writes are recorded in `github.writes` and answered by `github.handle(fn)` handlers ({raw} for a file's bytes, {status,
+ * headers, body} for an error), else refused. `github.alias`
  * {sha: fixture sha}: a commit made in a test reads as the fixture's.
  * `token`: a GitHub token in the page's storage, so edits and commits are offered.
  */
@@ -40,6 +41,7 @@ export const test = base.extend({
             for (const h of github.handlers) {
                 const out = h({method: 'GET', path: url.pathname + url.search, headers: req.headers()})
                 if (out?.raw !== undefined) return route.fulfill({status: 200, headers: {...cors, 'content-type': 'application/octet-stream'}, body: out.raw})
+                if (out?.status) return route.fulfill({status: out.status, headers: {...cors, 'content-type': 'application/json', ...out.headers}, body: JSON.stringify(out.body ?? {})})
                 if (out) return json(out)
             }
             const key = Object.entries(github.alias).reduce((k, [from, to]) => k.replaceAll(from, to), url.pathname + url.search)

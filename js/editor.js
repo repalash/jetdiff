@@ -14,6 +14,10 @@ export const DEFAULT_THEME = 'material-darker'
 
 export let MONACO_THEME = 'jd-' + DEFAULT_THEME
 
+// the editors' hovers: only TypeScript's and JavaScript's have something to show (typescript.js), after a pause as
+// the IDE's quick documentation on mouse hover; none on a touch screen, where a tap would show them
+export const HOVER = {enabled: matchMedia('(hover: hover)').matches, delay: 500}
+
 // the current variant's colors, updated in place by applyThemeCss (other modules hold these objects)
 export const DIFF_COLORS = {...THEMES[0].diff}
 export const EDITOR_COLORS = {...THEMES[0].editor}
@@ -246,6 +250,53 @@ export function languageName(id) {
     return LANG_NAMES[id] || id.charAt(0).toUpperCase() + id.slice(1)
 }
 
+// Comment syntax by Shiki language id, for Monaco's Comment Line and Block Comment: [line comment, block comment]
+const SLASHES = ['//', ['/*', '*/']]
+const HASH = ['#']
+const DASHES = ['--']
+const MARKUP = [null, ['<!--', '-->']]
+const COMMENT_GROUPS = [
+    [SLASHES, 'typescript tsx javascript jsx java kotlin swift c cpp objective-c objective-cpp csharp go rust dart scala groovy glsl hlsl wgsl jsonc json5 php less scss sass stylus proto solidity d haxe apex qml vala v jsonnet odin'],
+    [['//'], 'zig prisma'],
+    [HASH, 'python yaml toml dotenv docker make perl r elixir gdscript tcl awk graphql fish nushell just crystal'],
+    [['#', ['=begin', '=end']], 'ruby'],
+    [['#', ['/*', '*/']], 'nix terraform hcl'],
+    [['#', ['<#', '#>']], 'powershell'],
+    [['#', ['#[[', ']]']], 'cmake'],
+    [['#', ['###', '###']], 'coffee'],
+    [['#', ['#=', '=#']], 'julia'],
+    [['#', ['#[', ']#']], 'nim'],
+    [['#'], 'shellscript'],
+    [['--', ['/*', '*/']], 'sql plsql'],
+    [['--', ['--[[', ']]']], 'lua'],
+    [['--', ['{-', '-}']], 'haskell elm purescript'],
+    [DASHES, 'ada vhdl'],
+    [[';'], 'clojure racket asm ini fennel'],
+    [[';', ['#|', '|#']], 'common-lisp scheme'],
+    [['%'], 'erlang latex tex'],
+    [['%', ['%{', '%}']], 'matlab'],
+    [MARKUP, 'html xml markdown vue svelte astro vue-html'],
+    [[null, ['/*', '*/']], 'css'],
+    [[null, ['{/*', '*/}']], 'mdx'],
+    [['//', ['(*', '*)']], 'fsharp'],
+    [[null, ['(*', '*)']], 'ocaml'],
+    [['REM'], 'bat'],
+    [["'"], 'vb'],
+    [['"'], 'viml'],
+    [['!'], 'fortran-free-form'],
+]
+const COMMENTS = new Map(COMMENT_GROUPS.flatMap(([c, ids]) => ids.split(' ').map((id) => [id, c])))
+const BRACKETS = [['{', '}'], ['[', ']'], ['(', ')']]
+// a word there includes dashes (custom properties, class names), as Monaco's own CSS language has it
+const DASHED_WORDS = /(-?\d*\.\d\w*)|([\w-]+)/g
+const DASHED = new Set(['css', 'scss', 'sass', 'less', 'stylus'])
+
+/** The comment syntax of a Shiki language id: {lineComment?, blockComment?}, or null when it has none. */
+export function commentsOf(id) {
+    const c = COMMENTS.get(id)
+    return c ? {...c[0] && {lineComment: c[0]}, ...c[1] && {blockComment: c[1]}} : null
+}
+
 class TokenState {
     constructor(stack) { this.stack = stack }
     clone() { return new TokenState(this.stack) }
@@ -266,6 +317,10 @@ export async function ensureLanguage(monaco, id) {
     }
     // a language id of our own, so Monaco's built-in language services (TS diagnostics etc.) stay out
     monaco.languages.register({id: monId})
+    // the brackets also make Extend Selection grow to the enclosing block
+    monaco.languages.setLanguageConfiguration(monId, {
+        brackets: BRACKETS, ...commentsOf(id) && {comments: commentsOf(id)}, ...DASHED.has(id) && {wordPattern: DASHED_WORDS},
+    })
     const grammar = highlighter.getLanguage(id)
     monaco.languages.setTokensProvider(monId, {
         getInitialState: () => new TokenState(null),
@@ -301,8 +356,16 @@ export async function highlightCode(code, lang) {
     }
 }
 
-/** Loads both base themes and the grammars of `languages`, for offline use (sw.js keeps the rest of the libraries). */
+// the TypeScript service's worker module (typescript.js): loaded when first used, and kept by sw.js then
+const TS_WORKER = `${MONACO_BASE}/language/typescript/tsWorker.js`
+const TS_FAMILY = ['typescript', 'tsx', 'javascript', 'jsx']
+
+/**
+ * Loads both base themes, the grammars of `languages` and, for TypeScript or JavaScript, the TypeScript service, for
+ * offline use (sw.js keeps the rest of the libraries).
+ */
 export async function preloadForOffline(monaco, languages) {
     await Promise.all([baseTheme(true), baseTheme(false)])
     for (const id of new Set(languages)) await ensureLanguage(monaco, id).catch(() => {})
+    if (languages.some((id) => TS_FAMILY.includes(id))) await fetch(TS_WORKER).catch(() => {})
 }

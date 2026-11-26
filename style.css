@@ -202,6 +202,26 @@ body.side-hidden .side, body.side-hidden .splitter { display: none; }
 .uni-head .dim { margin-left: 8px; }
 .sbs-head .dim { margin-left: 4px; }
 .uni-ed { flex: 1; min-height: 0; border-top: 1px solid var(--border); }
+/* a file outside the changes, shown on its own (Go to Declaration) */
+.file-head { grid-template-columns: 1fr; }
+.file-head .sbs-head-left { grid-column: 1; gap: 6px; }
+.file-gh { display: flex; color: var(--icon-dim); }
+.file-gh:hover { color: var(--fg-strong); }
+.file-ed { flex: 1; min-height: 0; border-top: 1px solid var(--border); }
+.toolbar.outside .viewed-toggle, .toolbar.outside #btn-edit, .toolbar.outside #seg-md { display: none; }
+
+/* ⌘/Ctrl-hover: the name that Go to Declaration would take, as a link */
+.monaco-editor .jd-goto { text-decoration: underline; cursor: pointer; }
+.monaco-editor.jd-goto-on .view-lines { cursor: pointer; }
+.decl { padding-top: 2px; max-width: min(720px, calc(100vw - 16px)); outline: none; }
+.decl .menu-html { padding-left: 6px; }
+.decl .menu-html b { color: var(--fg-strong); }
+.decl-item { align-items: center; gap: 8px; padding: 4px 10px 4px 6px; white-space: nowrap; }
+.decl-item.sel { background: var(--popup-sel); }
+.decl-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 12.5px var(--code-font); color: var(--fg); }
+.decl-text b { color: var(--fg-strong); }
+.decl-where { color: var(--fg-dim); font-size: 12px; }
+.decl-note { margin-left: 4px; color: var(--accent); }
 
 .monaco-editor .dl-mod { background: var(--d-mod); }
 .monaco-editor .dl-ins { background: var(--d-ins); }

@@ -22,6 +22,9 @@ too) from the site itself.
 - **Markdown preview** for `.md` files, with the changed words highlighted and the two versions kept side by side.
 - **Quick edits**: edit the PR's files in place and commit them to its branch, with Amend and Undo.
 - **Search Everywhere** (double Shift) for files, actions, settings, commits and pull requests.
+- **Go to Declaration** (⌘/Ctrl-click, ⌘B/Ctrl+B) in every language, and TypeScript's own declarations and hovers
+  for TypeScript and JavaScript.
+- **JetBrains keys** in the editors (or VS Code's), and comments in each language's own style.
 - **Offline**: an installable app; download a repository's open pull requests and read them with no network.
 - **Themes**: the Material Theme UI variants (Darker, Oceanic, Palenight, Lighter and more).
 
@@ -53,8 +56,45 @@ Open `?pr=owner/repo/123`, or paste a pull request, commit or compare URL on the
 GitHub lists at most 3000 files of a pull request or a commit, and 300 of a compare: a notice says when a list is cut
 short, and when the merge base could not be read (the diff is then against the base branch's tip).
 
-Keys: F7 and Shift+F7 move between differences, Alt+→ and Alt+← between files, V marks a file viewed, double Shift
-opens Search Everywhere, and Ctrl/⌘ with + − 0 sizes the editor font.
+### Keys
+
+F7 and Shift+F7 move between differences, Alt+→ and Alt+← between files, V marks a file viewed, double Shift opens
+Search Everywhere (⌘/Ctrl+Shift+A its actions, ⌘/Ctrl+P its files), and ⌘/Ctrl with + − 0 sizes the editor font.
+
+The editors follow IntelliJ's keymap: its macOS keys on a Mac, its Windows/Linux keys elsewhere (the settings, the gear
+in the title bar, switch to VS Code's keys). In the read-only sides the editing keys do nothing.
+
+| Action | macOS | Windows/Linux |
+| --- | --- | --- |
+| Go to Declaration | ⌘B, ⌘-click | Ctrl+B, Ctrl+click |
+| Back, Forward | ⌘[, ⌘] | Ctrl+Alt+←, Ctrl+Alt+→ |
+| Duplicate Line or Selection | ⌘D | Ctrl+D |
+| Delete Line | ⌘⌫ | Ctrl+Y |
+| Move Line Up, Down | ⌥⇧↑, ⌥⇧↓ | Alt+Shift+↑, Alt+Shift+↓ (also Ctrl+Shift+↑, ↓) |
+| Extend, Shrink Selection | ⌥↑, ⌥↓ | Ctrl+W, Ctrl+Shift+W |
+| Add Next Occurrence, Unselect It | ⌃G, ⌃⇧G | Alt+J, Alt+Shift+J |
+| Select All Occurrences | ⌃⌘G | Ctrl+Alt+Shift+J |
+| Comment with Line Comment | ⌘/ | Ctrl+/ |
+| Comment with Block Comment | ⌘⌥/ | Ctrl+Shift+/ |
+| Find, Replace | ⌘F, ⌘R | Ctrl+F, Ctrl+R |
+| Find Next, Previous | ⌘G, ⌘⇧G | F3, Shift+F3 |
+| Go to Line | ⌘L | Ctrl+G |
+| Undo, Redo | ⌘Z, ⌘⇧Z | Ctrl+Z, Ctrl+Shift+Z |
+| Join Lines | ⌃⇧J | Ctrl+Shift+J |
+| Split Line | ⌘↩ | Ctrl+Enter |
+| Start New Line, Before | ⇧↩, ⌘⌥↩ | Shift+Enter, Ctrl+Alt+Enter |
+| Rename in File (all occurrences) | ⇧F6 | Shift+F6 |
+| Move Caret to Matching Brace | ⌃M | Ctrl+Shift+M |
+| Quick Documentation (TypeScript, JavaScript) | ⌃J, F1, or a pause on a name | Ctrl+Q, or a pause on a name |
+
+With VS Code's keys, Go to Declaration is F12 or ⌘/Ctrl-click.
+
+Go to Declaration in TypeScript and JavaScript asks TypeScript's language service, fed with the file and the files it
+imports by relative paths (read from the repository at the same commit). Elsewhere, and when TypeScript finds nothing,
+it looks for declarations of the name in the changed files, on both sides (`function x`, `class x`, `def x`, `fn x`, a
+C type before `x(`…), and then with GitHub's code search in the repository, which needs GitHub access and allows about 10
+searches a minute. One declaration opens; several are listed to choose from. A file outside the changes opens on its
+own, read-only, with a link to it on GitHub; Back returns.
 
 ### Links from AI agents
 
@@ -162,4 +202,5 @@ Without them the site offers token pasting only.
 
 ## License
 
-MIT, see LICENSE. The theme colors come from Material Theme UI Lite (MIT), see NOTICE.
+MIT, see LICENSE. The theme colors come from Material Theme UI Lite (MIT), and the JetBrains keymap from the IntelliJ
+IDEA Keybindings extension for VS Code (MIT), see NOTICE.

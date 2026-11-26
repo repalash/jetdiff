@@ -86,9 +86,11 @@ function renewToken() {
 const currentToken = () => tokenExpires() && tokenExpires() - Date.now() < 60000 && getToken() ? renewToken() : getToken()
 
 export class GitHubError extends Error {
-    constructor(message, status) {
+    /** `retryAt`: when GitHub's rate limit allows the request again (ms since the epoch), if it said. */
+    constructor(message, status, retryAt = 0) {
         super(message)
         this.status = status
+        this.retryAt = retryAt
     }
 }
 
@@ -319,12 +321,17 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
         let message = res.statusText || `HTTP ${res.status}`
         try { message = (await res.json()).message || message } catch { /* not json */ }
         if (res.status === 404 && !token) message += '. If the repository is private, add a GitHub token.'
-        if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0')
+        // the primary limit gives its reset, a secondary one (searches made too fast) a wait
+        let retryAt = 0
+        const limited = (res.status === 403 || res.status === 429) && (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.get('retry-after'))
+        if (limited) {
             message = 'GitHub API rate limit reached' + (token ? '' : '. Add a GitHub token for a higher limit.')
+            retryAt = res.headers.get('retry-after') ? Date.now() + 1000 * +res.headers.get('retry-after') : 1000 * +res.headers.get('x-ratelimit-reset')
+        }
         if (res.status === 401) message = 'GitHub refused the token (401). Check or replace it.'
         const app = signedIn() && (res.status === 403 || res.status === 404) && (await authConfig())?.appSlug
         if (app) message += ` If jetdiff is not installed on this repository, install it: https://github.com/apps/${app}/installations/new`
-        throw new GitHubError(message, res.status)
+        throw new GitHubError(message, res.status, retryAt)
     }
     return res
 }
@@ -564,6 +571,7 @@ async function loadCommit(owner, repo, sha, opts) {
 }
 
 const contentCache = new Map()
+const dirCache = new Map()
 
 function looksBinary(bytes) {
     const n = Math.min(bytes.length, 8000)
@@ -576,6 +584,7 @@ export function forgetLoaded(owner, repo) {
     const prefix = (s) => s.toLowerCase().startsWith(owner ? `${API}/repos/${owner}/${repo}/`.toLowerCase() : '')
     const files = (s) => s.toLowerCase().startsWith(owner ? `${owner}/${repo}/`.toLowerCase() : '')
     for (const k of contentCache.keys()) if (prefix(k)) contentCache.delete(k)
+    for (const k of dirCache.keys()) if (prefix(k)) dirCache.delete(k)
     for (const k of filesCache.keys()) if (files(k)) filesCache.delete(k)
 }
 
@@ -609,6 +618,25 @@ export function getFileContent(owner, repo, ref, path, {signal} = {}) {
         readOnly ??= mixedLineEndings(text) ? 'mixed line endings' : null
         return {text, size: bytes.length, ...readOnly && {readOnly}}
     })
+}
+
+/** The names of the files and folders in the folder `dir` ('' for the root) at `ref`: a Set. */
+export function listDirectory(owner, repo, ref, dir) {
+    const url = `${API}/repos/${owner}/${repo}/contents${dir ? '/' + dir.split('/').map(encodeURIComponent).join('/') : ''}?ref=${encodeURIComponent(ref)}`
+    return memo(dirCache, url, async () => {
+        const list = await json(url)
+        return new Set(Array.isArray(list) ? list.map((e) => e.name) : [])
+    })
+}
+
+/**
+ * GitHub's code search for `text` in a repository (its default branch): [{path, fragments}], the fragments being the
+ * text around the matches. It needs a token, and allows about 10 searches a minute.
+ */
+export async function searchCode(owner, repo, text, {signal} = {}) {
+    const q = encodeURIComponent(`${text} repo:${owner}/${repo}`)
+    const res = await json(`/search/code?q=${q}&per_page=30`, {accept: 'application/vnd.github.text-match+json', signal})
+    return res.items.map((it) => ({path: it.path, fragments: (it.text_matches || []).map((m) => m.fragment)}))
 }
 
 export async function searchMyPullRequests() {

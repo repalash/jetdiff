@@ -24,6 +24,9 @@ test('the app loads everything from the site: only GitHub is asked for anything 
     await page.waitForFunction(() => navigator.serviceWorker.controller)
     await page.goto(`./?pr=${PR}&file=plugins/cloud/src/auth/CloudAuth.ts`)
     await ready(page)
+    // the TypeScript service, in its worker from the site
+    await page.locator('.sbs-right .view-line', {hasText: 'export class CloudAuth'}).locator('span span', {hasText: 'CloudAuth'}).first().hover()
+    await expect(page.locator('.monaco-hover:visible')).toContainText('class CloudAuth', {timeout: 20000})
     // highlighted by Shiki's grammar: tokens of several colors
     await expect.poll(() => page.evaluate(() => new Set([...document.querySelectorAll('.sbs-right .view-line span[class^="mtk"]')].map((s) => s.className)).size)).toBeGreaterThan(3)
     await page.locator('#btn-unified').click()
