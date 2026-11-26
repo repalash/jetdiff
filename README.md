@@ -55,6 +55,15 @@ short, and when the merge base could not be read (the diff is then against the b
 Keys: F7 and Shift+F7 move between differences, Alt+→ and Alt+← between files, V marks a file viewed, double Shift
 opens Search Everywhere, and Ctrl/⌘ with + − 0 sizes the editor font.
 
+### Links from AI agents
+
+To have an agent (Claude Code, Codex and others) give jetdiff links next to the GitHub links it writes, add this line
+to its instructions file (`CLAUDE.md`, `AGENTS.md`); the start page has it with a Copy button:
+
+> When you link a GitHub pull request, commit or compare, also give the jetdiff link to it: the same URL with
+> `github.com` replaced by `jetdiff.com` (for example https://jetdiff.com/owner/repo/pull/123), which opens it in an
+> IDE-style diff.
+
 ### GitHub access
 
 Public repositories work without signing in (GitHub allows 60 requests an hour then). For private repositories, a

@@ -111,3 +111,12 @@ test('a GitHub link with the host swapped opens the same pull request', async ({
     await ready(page)
     expect(new URL(page.url()).searchParams.get('pr')).toBe(PR)
 })
+
+test('the start page offers a line for an agent\'s instructions file, and copies it', async ({page, context}) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.goto('./')
+    await expect(page.locator('#land-agent-line')).toContainText('jetdiff.com')
+    await page.locator('#land-agent-copy').click()
+    await expect(page.locator('#toasts')).toContainText('Copied')
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('replaced by `jetdiff.com`')
+})

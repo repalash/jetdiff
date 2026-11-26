@@ -280,6 +280,9 @@ a.btn { text-decoration: none; }
 .land-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--fg-strong); text-decoration: none; font-size: 12.5px; }
 .land-chip span { color: var(--fg-dim); font-size: 11.5px; }
 .land-chip:hover { border-color: var(--accent); }
+.land-agent { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.land-agent-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.land-agent-line { margin: 0; font: 12px/1.5 var(--code-font); color: var(--fg); user-select: all; overflow-wrap: anywhere; }
 .tok-app { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .tok-app .ic { width: 14px; height: 14px; vertical-align: -2px; color: var(--accent); }
 .noscript { max-width: 680px; margin: 0 auto; padding: 48px 24px; }

@@ -240,6 +240,9 @@ const landItem = (href, label, title) => `
 
 const TITLE = 'jetdiff · Code changes in an IDE-style side-by-side diff'
 const REPO_URL = 'https://github.com/repalash/jetdiff'
+// for the agent's instructions file (CLAUDE.md, AGENTS.md): links it writes open here too
+const AGENT_LINE = 'When you link a GitHub pull request, commit or compare, also give the jetdiff link to it: the same URL with ' +
+    '`github.com` replaced by `jetdiff.com` (for example https://jetdiff.com/owner/repo/pull/123), which opens it in an IDE-style diff.'
 const EXAMPLES = [
     ['repalash/threepipe/203', 'TypeScript, GLSL'],
     ['microsoft/vscode/350405', 'TypeScript, a big repository'],
@@ -281,6 +284,11 @@ function showLanding(error) {
                         <button class="btn btn-ghost" id="land-token">${icons.lock} ${signedIn() ? 'Signed in with GitHub'
                             : getToken() ? 'GitHub token saved: change' : 'Add a GitHub token (private repositories)'}</button>
                     </div>
+                    <div class="land-agent">
+                        <div class="land-agent-head"><span class="dim small">For your AI agent: add this line to <code>CLAUDE.md</code> or <code>AGENTS.md</code></span>
+                            <button class="btn btn-ghost btn-small" id="land-agent-copy">${icons.copy} Copy</button></div>
+                        <p class="land-agent-line" id="land-agent-line">${esc(AGENT_LINE)}</p>
+                    </div>
                 </div>
                 <picture class="land-shot">
                     <source media="(max-width: 600px)" srcset="./docs/phone.webp" width="1170" height="1992">
@@ -311,6 +319,16 @@ function showLanding(error) {
         go.onclick = signIn
     })
     $('#land-pack').onclick = () => pickPack()
+    $('#land-agent-copy').onclick = async () => {
+        try {
+            await navigator.clipboard.writeText(AGENT_LINE)
+            toast('Copied: paste it into CLAUDE.md or AGENTS.md')
+        } catch {
+            // no clipboard access (an insecure origin, a refused permission): select it to copy by hand
+            getSelection().selectAllChildren($('#land-agent-line'))
+            toast('Select and copy the highlighted line', 'error')
+        }
+    }
     snapshotRepos().then((repos) => {
         if (!repos?.length || !$('#land-snap')) return
         const n = repos.reduce((a, r) => a + r.prs.length, 0)
