@@ -593,6 +593,7 @@ async function openTarget(target, file) {
     state.cs = null
     state.order = []
     state.index = -1
+    state.shelfShown = null
     state.target = target
     state.ready = false
     state.notes = []
