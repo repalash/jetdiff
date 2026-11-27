@@ -188,6 +188,16 @@ function showError(el, message) {
     el.hidden = false
 }
 
+/** What a load that failed shows where the view waits on it: `title` (HTML), the error, and Retry (with `retry`). */
+const failureHtml = (title, e, retry = true) => `${title}<div class="dim small">${esc(e.message)}</div>
+    ${retry ? `<button type="button" class="btn btn-small retry">${icons.refresh} Retry</button>` : ''}`
+
+/** Makes the Retry button in `el` run `fn`. */
+function onRetry(el, fn) {
+    const b = el.querySelector('.retry')
+    if (b) b.onclick = fn
+}
+
 function tokenDialog() {
     const has = !!getToken()
     const viaApp = signedIn()
@@ -321,7 +331,11 @@ const EXAMPLES = [
     ['tokio-rs/tokio/8826', 'Rust'],
 ]
 
-function showLanding(error) {
+/**
+ * The start page; `error` {title, message}: why a link's pull request, commit or compare did not open, with Retry
+ * running `retry` when given.
+ */
+function showLanding(error = null, retry = null) {
     document.title = TITLE
     $('#app').hidden = true
     const el = $('#landing')
@@ -344,7 +358,7 @@ function showLanding(error) {
                         <button class="btn btn-primary" type="submit">Open</button>
                     </form>
                     <p class="dim small">Also takes <code>owner/repo#123</code>, commit URLs and compare URLs (<code>…/compare/main...feature</code>).</p>
-                    ${error ? `<div class="land-error">${esc(error)}</div>` : ''}
+                    ${error ? `<div class="land-error" id="land-error">${failureHtml(esc(error.title), error, !!retry)}</div>` : ''}
                     <div class="land-examples"><span class="dim small">Try an example</span>${EXAMPLES.map(([pr, lang]) => {
                         const [owner, repo, number] = pr.split('/')
                         return `<a class="land-chip" href="${esc(prHref({owner, repo}, number))}">${esc(prKey({owner, repo}, number))}<span>${lang}</span></a>`
@@ -382,6 +396,7 @@ function showLanding(error) {
         if (!t) return toast('Paste a GitHub pull request, commit or compare URL', 'error')
         navigate(t)
     }
+    if (retry) onRetry($('#land-error'), retry)
     $('#land-token').onclick = tokenDialog
     if (!getToken()) authConfig().then((cfg) => {
         const go = $('#land-signin')
@@ -575,7 +590,7 @@ async function openTarget(target, file) {
         if (id !== state.loadId) return
         setLoading(false)
         console.error(e)
-        return showLanding(e instanceof GitHubError ? `${labelForTarget(target)}: ${e.message}` : String(e.message || e))
+        return showLanding({title: `Could not open ${labelForTarget(target)}`, message: e.message || String(e)}, reloadTarget)
     }
     if (id !== state.loadId) return
     // the change set is shown with its edits only: until then, a commit would put edits made on the previous head
@@ -1421,7 +1436,8 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
     } catch (e) {
         if (id !== state.fileLoadId) return
         setLoading(false)
-        return showMessage(`Could not load ${esc(f.path)}<div class="dim small">${esc(e.message)}</div>`)
+        showMessage(failureHtml(`Could not load ${esc(f.path)}`, e))
+        return onRetry($('#view-msg'), () => openFileAt(i, false, keepScroll, land))
     }
     if (id !== state.fileLoadId) return
 
@@ -1760,7 +1776,9 @@ async function openTimeline() {
         $('#st-tl').innerHTML = `${icons.pr}#${pr.number} · ${prState(pr)} · ${esc(pr.user?.login || '')} → ${esc(pr.base.ref)}`
         $('#st-tl-n').textContent = `${plural(data.comments.length, 'comment')} · ${plural(reviewCount(data.reviews), 'review')} · ${data.inline.length} inline`
     } catch (e) {
-        if (state.timelineKey === key) host.innerHTML = `<div class="tl-loading dim">Could not load the conversation: ${esc(e.message)}</div>`
+        if (state.timelineKey !== key) return
+        host.innerHTML = `<div class="tl-loading msg">${failureHtml('Could not load the conversation', e)}</div>`
+        onRetry(host, openTimeline)
         state.timelineKey = null
     }
 }

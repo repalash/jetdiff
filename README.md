@@ -67,6 +67,9 @@ and `tab` names the one in front when it is not the diff.
 GitHub lists at most 3000 files of a pull request or a commit, and 300 of a compare: a notice says when a list is cut
 short, and when the merge base could not be read (the diff is then against the base branch's tip).
 
+A request that GitHub does not answer for 30 seconds is given up: the changes, a file or the Timeline that waited on
+it says so, with Retry.
+
 ### Keys
 
 F7 and Shift+F7 (or the arrows over the diff) move between differences, as in IntelliJ's diff: the caret goes to the

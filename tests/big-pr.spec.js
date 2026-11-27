@@ -68,6 +68,58 @@ test('switching to another pull request while a file loads never shows the first
     await expect(page.locator('.view-lines', {hasText: 'new a'})).toHaveCount(0)
 })
 
+test.describe('a request GitHub does not answer', () => {
+    // the page's timers run on Playwright's clock: 30 s pass at once
+    test.beforeEach(({page}) => page.clock.install())
+    const stall = (page) => page.clock.fastForward(31000)
+
+    test('stops the file\'s load: a message says so, and Retry loads it', async ({page}) => {
+        const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
+        const held = await gate(page, (u) => u.pathname.endsWith('/contents/a.ts') && u.search.includes(pr.head))
+        await page.goto(pr.url)
+        await expect.poll(() => held.seen).toBe(1)
+        await stall(page)
+        await expect(page.locator('#view-msg')).toContainText('Could not load a.ts')
+        await expect(page.locator('#view-msg')).toContainText('GitHub did not answer for 30 seconds')
+        await expect(page.locator('#loading-bar')).not.toHaveClass(/\bon\b/)
+        held.release()
+        await page.locator('#view-msg .retry').click()
+        await ready(page)
+        await expect(page.locator('.sbs-right .view-lines')).toContainText('new a')
+    })
+
+    test('stops the change set\'s load: the start page says so, and Retry opens it', async ({page}) => {
+        const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
+        const held = await gate(page, (u) => u.pathname === `/repos/repalash/threepipe/pulls/${number}`)
+        await page.goto(pr.url)
+        await expect.poll(() => held.seen).toBe(1)
+        await stall(page)
+        await expect(page.locator('#land-error')).toContainText(`Could not open repalash/threepipe#${number}`)
+        await expect(page.locator('#land-error')).toContainText('GitHub did not answer for 30 seconds')
+        held.release()
+        await page.locator('#land-error .retry').click()
+        await ready(page)
+        await expect(page.locator('#tree .tr-file')).toHaveCount(1)
+    })
+
+    test('stops the Timeline\'s load: it says so, and Retry loads it', async ({page}) => {
+        const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
+        page.github.handle(({path}) => path.startsWith(`/repos/repalash/threepipe/issues/${number}`) || path.includes(`/pulls/${number}/reviews`)
+            || path.includes(`/pulls/${number}/comments`) ? [] : undefined)
+        const held = await gate(page, (u) => u.pathname.endsWith(`/issues/${number}/comments`))
+        await page.goto(pr.url)
+        await ready(page)
+        await page.locator('#pr-timeline').click()
+        await expect.poll(() => held.seen).toBe(1)
+        await stall(page)
+        await expect(page.locator('#timeline-host')).toContainText('Could not load the conversation')
+        await expect(page.locator('#timeline-host')).toContainText('GitHub did not answer for 30 seconds')
+        held.release()
+        await page.locator('#timeline-host .retry').click()
+        await expect(page.locator('.tl-desc')).toBeVisible()
+    })
+})
+
 /** `n` files in `dirs` folders, each a one-line change. */
 const manyFiles = (n, dirs = 30) => Array.from({length: n}, (_, i) => ({filename: `pkg/d${String(i % dirs).padStart(2, '0')}/f${String(i).padStart(4, '0')}.txt`,
     old: 'a\n', new: 'b\n'}))

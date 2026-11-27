@@ -167,7 +167,9 @@ export class LogView {
             this.filesCount.textContent = plural(files.length, 'file')
         } catch (e) {
             if (id !== this.loadId) return
-            this.treeEl.innerHTML = `<div class="tree-msg dim">${esc(e.message)}</div>`
+            this.treeEl.innerHTML = `<div class="tree-msg dim">${esc(e.message)}
+                <button type="button" class="btn btn-small retry">${icons.refresh} Retry</button></div>`
+            this.treeEl.querySelector('.retry').onclick = () => this.loadSelection()
         }
     }
 }

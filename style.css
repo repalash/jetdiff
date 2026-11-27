@@ -333,7 +333,10 @@ a.btn { text-decoration: none; }
 .land-form .btn { height: 38px; }
 .land-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .land-row .btn { padding-left: 8px; }
-.land-error { background: #3a2424; border: 1px solid #5a2f2f; color: #f5b5b5; padding: 10px 12px; border-radius: 8px; }
+.land-error { background: color-mix(in srgb, var(--danger) 12%, var(--bg)); border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--bg)); color: var(--fg-strong); padding: 10px 12px; border-radius: 8px; }
+.land-error .small { margin-top: 4px; }
+/* Retry, under a failed load's message */
+.retry { margin-top: 10px; }
 .land-list { display: flex; flex-direction: column; }
 .land-item { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 6px; text-decoration: none; color: var(--fg-strong); }
 .land-item:hover { background: var(--bg-hover); }

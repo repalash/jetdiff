@@ -86,11 +86,56 @@ function renewToken() {
 const currentToken = () => tokenExpires() && tokenExpires() - Date.now() < 60000 && getToken() ? renewToken() : getToken()
 
 export class GitHubError extends Error {
-    /** `retryAt`: when GitHub's rate limit allows the request again (ms since the epoch), if it said. */
-    constructor(message, status, retryAt = 0) {
+    /**
+     * `retryAt`: when GitHub's rate limit allows the request again (ms since the epoch), if it said. `stalled`: no answer
+     * came in time (STALL_MS).
+     */
+    constructor(message, status, {retryAt = 0, stalled = false} = {}) {
         super(message)
         this.status = status
         this.retryAt = retryAt
+        this.stalled = stalled
+    }
+}
+
+/** A request that gets no answer, or no more of its body, for this long has stalled: it is given up. */
+export const STALL_MS = 30000
+
+/**
+ * fetch(), its body read here, given up when nothing comes for STALL_MS (`who` names the site in the error then);
+ * `signal` aborts it.
+ */
+async function fetchOrStall(url, init, who, signal) {
+    const ctl = new AbortController()
+    const abort = () => ctl.abort()
+    if (signal?.aborted) abort()
+    signal?.addEventListener('abort', abort)
+    let timer, stalled = false
+    const wait = () => {
+        clearTimeout(timer)
+        timer = setTimeout(() => { stalled = true; ctl.abort() }, STALL_MS)
+    }
+    try {
+        wait()
+        const res = await fetch(url, {...init, signal: ctl.signal})
+        const chunks = []
+        if (res.body) {
+            for (const reader = res.body.getReader(); ;) {
+                const {done, value} = await reader.read()
+                if (done) break
+                chunks.push(value)
+                wait()
+            }
+        }
+        // a status that has no body (204, 304) takes none
+        const body = res.status === 204 || res.status === 205 || res.status === 304 ? null : new Blob(chunks)
+        return new Response(body, {status: res.status, statusText: res.statusText, headers: res.headers})
+    } catch (e) {
+        if (stalled) throw new GitHubError(`${who} did not answer for ${STALL_MS / 1000} seconds`, 0, {stalled: true})
+        throw e
+    } finally {
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', abort)
     }
 }
 
@@ -226,7 +271,7 @@ async function fromPack(url, method) {
 async function snapFetch(f) {
     const url = snapFile(f).href
     // a snapshot folder at a URL never changes (a new recording gets a new folder)
-    return cachedFetch(SNAP_CACHE, url, () => fetch(url))
+    return cachedFetch(SNAP_CACHE, url, () => fetchOrStall(url, {}, new URL(url).host))
 }
 
 export function setSnapshot(v) {
@@ -282,14 +327,15 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
     if (token) headers.Authorization = `Bearer ${token}`
     if (body) headers['Content-Type'] = 'application/json'
     // GitHub allows a minute of caching: revalidated (a 304 costs no rate limit), else a ref or PR head can be stale
-    const send = () => fetch(url, {method, headers, body: body && JSON.stringify(body), cache: 'no-cache', signal})
-    // GitHub could not be reached: the imported packs answer what they hold (never what must be current)
+    const send = () => fetchOrStall(url, {method, headers, body: body && JSON.stringify(body), cache: 'no-cache'}, 'GitHub', signal)
+    // GitHub could not be reached, or stopped answering: the imported packs answer what they hold (never what must be
+    // current)
     const fallback = () => live || signal?.aborted ? null : fromPack(url, method)
     let res
     try {
         res = await send()
     } catch (e) {
-        if (!(e instanceof TypeError)) throw e
+        if (!(e instanceof TypeError) && !e.stalled) throw e
         res = await fallback()
         if (!res) throw e
     }
@@ -322,7 +368,7 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
         if (res.status === 401) message = 'GitHub refused the token (401). Check or replace it.'
         const app = signedIn() && (res.status === 403 || res.status === 404) && (await authConfig())?.appSlug
         if (app) message += ` If jetdiff is not installed on this repository, install it: https://github.com/apps/${app}/installations/new`
-        throw new GitHubError(message, res.status, retryAt)
+        throw new GitHubError(message, res.status, {retryAt})
     }
     return res
 }
