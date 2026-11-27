@@ -173,6 +173,40 @@ test('Copy and Download take a shelved file as it is, and an entry of several fi
     expect(fs.readFileSync(await (await download).path(), 'utf8')).toBe('two\n')
 })
 
+test('Shelve Changes moves the checked edits to a new Shelf entry, named after the commit message, else the date', async ({page}) => {
+    openPr(page.github)
+    const older = entry('a', 'Older', [['CHANGELOG.md', 'x\n']])
+    await seedEdits(page, {[FILE]: 'one\n', [FILE2]: 'two\n'}, [older])
+    await page.goto(`./?pr=${PR}&file=${FILE}`)
+    await ready(page)
+    await expect(page.locator('.sbs-head-right .tag-ed')).toHaveText('edited here')
+    await page.locator('#btn-commit').click()
+    // unchecked, the second stays an edit
+    await page.locator(`#cmt-tree .tr-file[data-file="${FILE2}"] .tvd`).click()
+    await page.locator('#cmt-shelve').click()
+    await expect(page.locator('#dialog')).toContainText(`Moves your edits of ${FILE} to the Shelf`)
+    await expect(page.locator('#sv-name')).toHaveValue(/^Changes of \w+ \d+, \d{4}/)
+    await page.locator('#sv-cancel').click()
+    await page.locator('#cmt-msg').fill('Try the new expiry\n\nWith a reason.')
+    await page.locator('#cmt-shelve').click()
+    await expect(page.locator('#sv-name')).toHaveValue('Try the new expiry')
+    await page.locator('#sv-go').click()
+    await expect(page.locator('#toasts')).toContainText(`Shelved ${FILE}`)
+    await expect(page.locator('#tree .tr-file.edited')).toHaveAttribute('data-file', FILE2)
+    // the file shows the head's version again
+    await expect(page.locator('.sbs-head-right .tag-ed')).toHaveCount(0)
+    expect(await storedEdits(page)).toEqual({head: HEAD, files: {[FILE2]: 'two\n'}, shelf: [
+        {id: expect.any(String), name: 'Try the new expiry', date: expect.any(Number), files: [{path: FILE, head: HEAD, text: 'one\n'}]}, older,
+    ]})
+    await page.locator('.toast-action', {hasText: 'Show'}).click()
+    await expect(page.locator('#shelf .sh-entry .tn')).toHaveText(['Try the new expiry', 'Older'])
+    await expect(page.locator('#shelf .sh-entry').first()).toHaveClass(/sel/)
+    await expect(page.locator('#sh-unshelve')).toHaveAttribute('aria-disabled', 'false')
+    // with nothing checked, nothing to shelve
+    await page.locator('#stab-commit').click()
+    await expect(page.locator('#cmt-shelve')).toBeDisabled()
+})
+
 test('the Shelf works in the drawer on a phone @phone', async ({page}) => {
     openPr(page.github)
     await seedEdits(page, {[FILE2]: 'an edit\n'}, [entry('a', 'Shelved here', [[FILE, 'shelved\n']])])

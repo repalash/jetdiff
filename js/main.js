@@ -766,6 +766,7 @@ function buildShell() {
                 <div class="cmt" id="cmt" hidden>
                     <div class="side-tools">
                         <button class="tb-btn" id="cmt-rollback" title="Rollback: discard the edits of the checked files">${icons.undo}</button>
+                        <button class="tb-btn" id="cmt-shelve" title="Shelve Changes: move the edits of the checked files to the Shelf">${icons.shelf}</button>
                         <button class="tb-btn" id="cmt-expand" title="Expand All">${icons.expand}</button>
                         <button class="tb-btn" id="cmt-collapse" title="Collapse All">${icons.collapse}</button>
                     </div>
@@ -880,6 +881,7 @@ function buildShell() {
     $('#cmt-expand').onclick = () => state.cmtTree.collapseAll(false)
     $('#cmt-collapse').onclick = () => state.cmtTree.collapseAll(true)
     $('#cmt-rollback').onclick = () => rollbackChecked()
+    $('#cmt-shelve').onclick = () => shelveDialog()
     $('#cmt-amend').onchange = () => onAmendToggle()
     $('#cmt-msg').oninput = () => renderCommitPanel(false)
     $('#cmt-msg').onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); doCommit() } }
@@ -2807,6 +2809,42 @@ function rollbackChecked() {
     if (paths.includes(currentFile()?.path)) reopenFile(true)
 }
 
+/** Shelve Changes: the checked edits to a new Shelf entry, named as the IDE does (the commit message, else the date). */
+function shelveDialog() {
+    const paths = checkedEdits()
+    if (!paths.length || !state.ready) return
+    const name = firstLine($('#cmt-msg').value.trim()) || `Changes of ${new Date().toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'})}`
+    const dlg = openDialog(`
+        <form class="dlg" method="dialog">
+            <h2>Shelve Changes</h2>
+            <p class="dim">Moves your edits of ${esc(filesLabel(paths))} to the Shelf: the files go back to the head's version, and
+            Unshelve brings the edits back.</p>
+            <input id="sv-name" value="${esc(name)}" aria-label="Name" autocomplete="off" spellcheck="false">
+            <div class="dlg-actions"><span class="spacer"></span>
+                <button type="button" id="sv-cancel" class="btn btn-ghost">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="sv-go">Shelve</button></div>
+        </form>`, {focus: '#sv-name', cancel: '#sv-cancel'})
+    $('#sv-name', dlg).select()
+    $('form', dlg).onsubmit = (e) => {
+        e.preventDefault()
+        dlg.close()
+        shelveEdits(paths, $('#sv-name', dlg).value.trim() || name)
+    }
+}
+
+function shelveEdits(paths, name) {
+    const key = state.editKey
+    const entry = {id: shelfId(), name, date: Date.now(), files: paths.map((path) => ({path, head: state.editHead, text: state.edits.get(path)}))}
+    // the edits stay unless the Shelf has them
+    if (!writeStoredEdits(key, (e) => ({...e, shelf: [entry, ...e.shelf || []]})))
+        return toast('Could not shelve: this device could not save the Shelf (its storage is full or unavailable)', 'error', 10000)
+    for (const p of paths) state.edits.delete(p)
+    renderEdits()
+    flushEdits()
+    if (paths.includes(currentFile()?.path)) reopenFile(true)
+    toast(`Shelved ${filesLabel(paths)}`, 'info', 6000, {label: 'Show', run: openShelf})
+}
+
 /** The message of the commit the edits are on, once read; else null. */
 function headCommitMessage() {
     const h = state.headMessage
@@ -2866,6 +2904,7 @@ function renderCommitPanel(tree = true) {
         }
     }
     const amend = $('#cmt-amend').checked
+    $('#cmt-shelve').disabled = !included.length || !state.ready
     $('#cmt-count').textContent = files.length ? `${included.length} modified` : ''
     const pr = state.cs?.pr
     $('#cmt-to').innerHTML = pr ? `to ${icons.branch}<span>${esc(pr.head.ref)}</span>` : ''
@@ -3741,6 +3780,7 @@ function actionItems() {
         A('Download for Offline…', () => offlineDialog(), {ic: icons.download}),
         state.cs?.pr && A('View Timeline', () => openTimeline(), {ic: icons.comment}),
         state.edits.size && A('Commit…', () => openCommitPanel(), {ic: icons.commit}),
+        state.ready && checkedEdits().length && A('Shelve Changes…', shelveDialog, {ic: icons.shelf, sub: 'the edits checked in the Commit tab'}),
         shelfKey() && A('Shelf', openShelf, {ic: icons.shelf, sub: 'edits put aside'}),
         state.editableFile && A(state.editing ? 'Stop Editing' : 'Edit File', () => setEditing(!state.editing), {ic: icons.pencil}),
         A('Go to Declaration', () => goToDeclaration(), {hint: shortcut(s.keymap, DECLARATION), sub: 'the name at the caret'}),
