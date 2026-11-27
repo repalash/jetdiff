@@ -343,7 +343,7 @@ a.btn { text-decoration: none; }
 .note > .ic { flex: none; margin-top: 1px; color: var(--modified); }
 .note-text { flex: 1; min-width: 0; }
 .note .note-x { flex: none; width: 22px; height: 18px; }
-.tl-partial { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; }
+.tl-partial { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 /* Retry, under a failed load's message */
 .retry { margin-top: 10px; }
 .land-list { display: flex; flex-direction: column; }

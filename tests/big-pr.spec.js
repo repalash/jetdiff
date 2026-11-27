@@ -81,6 +81,7 @@ test.describe('a request GitHub does not answer', () => {
         await stall(page)
         await expect(page.locator('#view-msg')).toContainText('Could not load a.ts')
         await expect(page.locator('#view-msg')).toContainText('GitHub did not answer for 30 seconds')
+        await expect(page.locator('#diff-count')).toHaveText('Not loaded')
         await expect(page.locator('#loading-bar')).not.toHaveClass(/\bon\b/)
         held.release()
         await page.locator('#view-msg .retry').click()
@@ -175,7 +176,7 @@ test.describe('data GitHub gave in part, or not at all, says so', () => {
         await ready(page)
         await page.locator('#pr-timeline').click()
         await expect(page.locator('.tl-desc')).toBeVisible()
-        await expect(page.locator('.tl-partial')).toContainText(['Only the first 500 comments', 'The inline comments could not be read', 'The reactions to the description could not be read'])
+        await expect(page.locator('.tl-partial .note')).toContainText(['Only the first 500 comments', 'The inline comments could not be read', 'The reactions to the description could not be read'])
     })
 
     test('the Log\'s files of a range of commits, cut at 300', async ({page}) => {

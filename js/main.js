@@ -1499,6 +1499,7 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
     renderViewed()
     state.editableFile = false
     state.tooLarge = false
+    state.fileFailed = false
     applyEditable()
     updateToolbar()
     setLoading(true)
@@ -1517,6 +1518,7 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
     } catch (e) {
         if (id !== state.fileLoadId) return
         setLoading(false)
+        state.fileFailed = true
         showMessage(failureHtml(`Could not load ${esc(f.path)}`, e))
         return onRetry($('#view-msg'), () => openFileAt(i, false, keepScroll, land))
     }
@@ -1956,7 +1958,7 @@ async function timelineHtml(cs, {comments, reviews, inline, reactions, cut, miss
         missing.includes('inline') && 'The inline comments could not be read.',
         missing.includes('reactions') && 'The reactions to the description could not be read.',
     ].filter(Boolean)
-    return `<div class="tl">${partial.map((t) => `<div class="note tl-partial" role="status">${icons.info}<span class="note-text">${esc(t)}</span></div>`).join('')}
+    return `<div class="tl">${partial.length ? `<div class="notes tl-partial">${partial.map((t) => `<div class="note" role="status">${icons.info}<span class="note-text">${esc(t)}</span></div>`).join('')}</div>` : ''}
         <header class="tl-head"><h1>${esc(pr.title)} <span class="dim">#${esc(pr.number)}</span></h1>
             <div class="tl-sub"><span class="state-pill st-${esc(s)}">${esc(cap(s))}</span>
             <span><b>${esc(pr.user?.login || '')}</b> ${pr.merged_at ? 'merged' : 'wants to merge'} ${plural(pr.commits ?? cs.commits?.length ?? 0, 'commit')} into <code>${esc(pr.base.ref)}</code> from <code>${esc(pr.head.label)}</code></span></div></header>
@@ -3363,7 +3365,8 @@ function updateToolbar() {
     const d = diffInfo()
     const loading = $('#loading-bar').classList.contains('on')
     const first = state.index <= 0, last = state.index >= state.order.length - 1
-    $('#diff-count').textContent = loading ? '' : isShown('file') ? 'Not in the changes' : state.tooLarge ? 'Too large to compare' : d.count === 0 ? 'No differences' : plural(d.count, 'difference')
+    $('#diff-count').textContent = loading ? '' : isShown('file') ? 'Not in the changes' : state.tooLarge ? 'Too large to compare'
+        : state.fileFailed ? 'Not loaded' : d.count === 0 ? 'No differences' : plural(d.count, 'difference')
     $('#btn-prev-diff').disabled = !d.prev && first
     $('#btn-next-diff').disabled = !d.next && last
     $('#btn-prev-file').disabled = first
