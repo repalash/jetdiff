@@ -26,6 +26,8 @@ for (const [view, editor] of [['sbs', '.sbs-right'], ['unified', '.editor.modifi
         await expect(page.locator('#st-pos')).toHaveText('Difference 2 of 2')
         const ed = page.locator(editor)
         await expect(ed.locator('textarea')).toBeFocused()
+        // Monaco draws the caret on the next frame
+        await expect(ed.locator('.cursor')).toBeVisible()
         const line = await ed.locator('.view-line', {hasText: 'changed 90'}).boundingBox()
         const caret = await ed.locator('.cursor').boundingBox()
         const view_ = await ed.locator('.monaco-scrollable-element').first().boundingBox()
