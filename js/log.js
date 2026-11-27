@@ -26,6 +26,8 @@ export class LogView {
         this.commits = []
         this.sel = null // {anchor, a, b} display indices (newest first)
         this.filter = ''
+        this.shown = false
+        this.stale = false // the selection's details and files are not read yet: when the Log is shown
         el.innerHTML = `
             <div class="log">
                 <div class="log-main">
@@ -96,7 +98,15 @@ export class LogView {
         }
         if (!this.sel && this.commits.length) this.sel = {anchor: 0, a: 0, b: 0}
         this.render()
-        this.loadSelection()
+        this.ctl?.abort()
+        this.stale = true
+        if (this.shown) this.loadSelection()
+    }
+
+    /** The Log is shown (or hidden): it reads the selection's files once shown. */
+    setShown(on) {
+        this.shown = on
+        if (on && this.stale) this.loadSelection()
     }
 
     /** The selection as a commit spec: 'sha' or 'olderSha..newerSha'. */
@@ -124,6 +134,7 @@ export class LogView {
     }
 
     async loadSelection() {
+        this.stale = false
         if (!this.sel) return
         const newer = this.commits[this.sel.a], older = this.commits[this.sel.b]
         const id = (this.loadId = (this.loadId || 0) + 1)
@@ -160,13 +171,15 @@ export class LogView {
             : `${count} commits · ${esc(shortSha(older.sha))} … ${esc(shortSha(newer.sha))}`)
         this.filesCount.textContent = ''
         this.treeEl.innerHTML = '<div class="tree-msg dim">Loading…</div>'
+        this.ctl?.abort()
+        const {signal} = this.ctl = new AbortController()
         try {
-            const files = await getCommitFiles(this.owner, this.repo, older.sha, newer.sha, older.parents?.[0]?.sha)
+            const files = await getCommitFiles(this.owner, this.repo, older.sha, newer.sha, older.parents?.[0]?.sha, {signal})
             if (id !== this.loadId) return
             this.tree.setFiles(files)
             this.filesCount.textContent = plural(files.length, 'file')
         } catch (e) {
-            if (id !== this.loadId) return
+            if (id !== this.loadId || signal.aborted) return
             this.treeEl.innerHTML = `<div class="tree-msg dim">${esc(e.message)}
                 <button type="button" class="btn btn-small retry">${icons.refresh} Retry</button></div>`
             this.treeEl.querySelector('.retry').onclick = () => this.loadSelection()

@@ -171,14 +171,37 @@ async function cachedFetch(name, url, load) {
     return cache && res.ok && !res.headers.get('x-jd-pack') ? keep(cache, url, res) : res
 }
 
-/** A promise kept in `map` under `key`, dropped when it fails (so a later call retries). */
-function memo(map, key, load) {
+const aborted = () => new DOMException('The load was replaced', 'AbortError')
+
+/**
+ * `load(signal)`'s promise, kept in `map` under `key` and dropped when it fails (so a later call retries). Callers
+ * share it: `signal` stops waiting for it, and `load` is aborted once every caller that came with a signal aborted it,
+ * none without.
+ */
+function memo(map, key, load, signal) {
     if (!map.has(key)) {
-        const p = load()
-        map.set(key, p)
-        p.catch(() => map.delete(key))
+        const ctl = new AbortController()
+        const e = {ctl, waiting: 0, kept: false, p: load(ctl.signal)}
+        map.set(key, e)
+        e.p.catch(() => { if (map.get(key) === e) map.delete(key) })
     }
-    return map.get(key)
+    const e = map.get(key)
+    if (!signal) {
+        e.kept = true
+        return e.p
+    }
+    if (signal.aborted) return Promise.reject(aborted())
+    e.waiting++
+    return new Promise((resolve, reject) => {
+        const stop = () => {
+            reject(aborted())
+            if (--e.waiting || e.kept) return
+            if (map.get(key) === e) map.delete(key)
+            e.ctl.abort()
+        }
+        signal.addEventListener('abort', stop, {once: true})
+        e.p.then(resolve, reject).finally(() => signal.removeEventListener('abort', stop))
+    })
 }
 
 /** An absolute https URL: what `?snap=` and `?packs=` take (anything else is ignored). */
@@ -582,10 +605,10 @@ export async function loadChangeSet(target, {signal} = {}) {
 
 const filesCache = new Map()
 /** The changed files of one commit, or of the range from `first`'s parent to `last`. */
-export function getCommitFiles(owner, repo, first, last, parentOfFirst) {
-    return memo(filesCache, `${owner}/${repo}/${first}..${last}`, () => first === last
-        ? loadCommit(owner, repo, first).then((c) => c.files)
-        : json(`/repos/${owner}/${repo}/compare/${parentOfFirst || first + '^'}...${last}?per_page=100`).then((c) => mapFiles(c.files || [])))
+export function getCommitFiles(owner, repo, first, last, parentOfFirst, {signal} = {}) {
+    return memo(filesCache, `${owner}/${repo}/${first}..${last}`, (s) => first === last
+        ? loadCommit(owner, repo, first, {signal: s}).then((c) => c.files)
+        : json(`/repos/${owner}/${repo}/compare/${parentOfFirst || first + '^'}...${last}?per_page=100`, {signal: s}).then((c) => mapFiles(c.files || [])), signal)
 }
 
 async function loadCommit(owner, repo, sha, opts) {
@@ -634,7 +657,7 @@ const mixedLineEndings = (text) => text.includes('\r\n') && /(^|[^\r])\n/.test(t
  */
 export function getFileContent(owner, repo, ref, path, {signal} = {}) {
     const url = `${API}/repos/${owner}/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`
-    return memo(contentCache, url, async () => {
+    return memo(contentCache, url, async (signal) => {
         const load = () => request(url, {accept: 'application/vnd.github.raw+json', signal})
         // contents at a commit sha never change: kept for fast reopening (on a phone) and offline use; a snapshot's
         // are its own (another site's data never becomes GitHub's here)
@@ -654,7 +677,7 @@ export function getFileContent(owner, repo, ref, path, {signal} = {}) {
         }
         readOnly ??= mixedLineEndings(text) ? 'mixed line endings' : null
         return {text, size: bytes.length, ...readOnly && {readOnly}}
-    })
+    }, signal)
 }
 
 /** The names of the files and folders in the folder `dir` ('' for the root) at `ref`: a Set. */
@@ -714,8 +737,8 @@ export async function accountIdentity() {
     return {name: me.name || me.login, email: me.email || `${me.id}+${me.login}@users.noreply.github.com`}
 }
 
-async function graphql(query, variables) {
-    const res = await request(`${API}/graphql`, {method: 'POST', body: {query, variables}})
+async function graphql(query, variables, {signal} = {}) {
+    const res = await request(`${API}/graphql`, {method: 'POST', body: {query, variables}, signal})
     const data = await res.json()
     if (data.errors?.length) throw new GitHubError(data.errors.map((e) => e.message).join('; '), 200)
     if (!data.data) throw new GitHubError(data.message || 'GraphQL request failed', 200)
@@ -723,13 +746,13 @@ async function graphql(query, variables) {
 }
 
 /** `{id, states}`: the PR's node id, and path -> 'VIEWED' | 'UNVIEWED' | 'DISMISSED'. Needs a token. */
-export async function getViewedStates(owner, repo, number) {
+export async function getViewedStates(owner, repo, number, {signal} = {}) {
     const states = new Map()
     let after = null
     let id
     for (let i = 0; i < 40; i++) {
         const d = await graphql(`query($o:String!,$r:String!,$n:Int!,$after:String){repository(owner:$o,name:$r){pullRequest(number:$n){id files(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{path viewerViewedState}}}}}`,
-            {o: owner, r: repo, n: number, after})
+            {o: owner, r: repo, n: number, after}, {signal})
         const pr = d.repository.pullRequest
         id = pr.id
         for (const f of pr.files.nodes) states.set(f.path, f.viewerViewedState)

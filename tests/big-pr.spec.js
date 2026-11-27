@@ -120,6 +120,25 @@ test.describe('a request GitHub does not answer', () => {
     })
 })
 
+/** The paths of the requests to GitHub the page makes from now on. */
+function githubRequests(page) {
+    const paths = []
+    page.on('request', (r) => { const u = new URL(r.url()); if (u.hostname === 'api.github.com' && r.method() === 'GET') paths.push(u.pathname + u.search) })
+    return paths
+}
+
+test('the Log reads the selected commit\'s files when it is first shown, not before', async ({page}) => {
+    const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
+    const paths = githubRequests(page)
+    await page.goto(pr.url)
+    await ready(page)
+    const commitFiles = () => paths.filter((p) => p.includes(`/commits/${pr.head}`))
+    expect(commitFiles()).toEqual([])
+    await page.locator('#tab-log').click()
+    await expect(page.locator('#log-tree .tr-file')).toHaveCount(1)
+    expect(commitFiles()).toHaveLength(1)
+})
+
 /** `n` files in `dirs` folders, each a one-line change. */
 const manyFiles = (n, dirs = 30) => Array.from({length: n}, (_, i) => ({filename: `pkg/d${String(i % dirs).padStart(2, '0')}/f${String(i).padStart(4, '0')}.txt`,
     old: 'a\n', new: 'b\n'}))
@@ -160,4 +179,44 @@ test('a step to the next file or a Viewed mark updates the rows it changes, not 
     await page.locator('#btn-next-file').click()
     await ready(page)
     await expect(page.locator('#tree .tr-file.sel')).toBeVisible()
+})
+
+test('a load another one replaced stops: no more pages of the files of a pull request switched away from', async ({page}) => {
+    const a = fakePr(page.github, ++number, manyFiles(3000))
+    const b = fakePr(page.github, ++number, [{filename: 'b.ts', old: 'old b\n', new: 'new b\n'}])
+    const pagesOfA = () => paths.filter((p) => p.startsWith(`/repos/repalash/threepipe/pulls/${number - 1}/files?`))
+    const held = await gate(page, (u) => u.pathname.endsWith(`/pulls/${number - 1}/files`) && u.search.includes('page=2'))
+    const paths = githubRequests(page)
+    await page.goto(a.url)
+    await expect.poll(() => held.seen).toBe(1)
+    await goTo(page, b.url)
+    await ready(page)
+    held.release()
+    await page.waitForTimeout(1000)
+    // GitHub lists them 100 a page: pages 3 to 30 are never asked for
+    expect(pagesOfA()).toHaveLength(2)
+})
+
+test('a file\'s load stops when another file opens, but a load the new one shares goes on', async ({page}) => {
+    const files = ['a', 'b', 'c', 'd'].map((n) => ({filename: `${n}.ts`, old: `old ${n}\n`, new: `new ${n}\n`}))
+    const pr = fakePr(page.github, ++number, files)
+    const failed = []
+    page.on('requestfailed', (r) => failed.push(new URL(r.url()).pathname))
+    const heldB = await gate(page, (u) => u.pathname.endsWith('/contents/b.ts') && u.search.includes(pr.head))
+    const heldC = await gate(page, (u) => u.pathname.endsWith('/contents/c.ts') && u.search.includes(pr.head))
+    await page.goto(`${pr.url}&file=a.ts`)
+    await ready(page)
+    // the next file is read ahead
+    await expect.poll(() => heldB.seen).toBe(1)
+    // b.ts opens: it waits on the read ahead, which goes on
+    await page.locator('#tree .tr-file[data-file="b.ts"]').click()
+    await page.waitForTimeout(300)
+    expect(failed).toEqual([])
+    // c.ts opens before b.ts arrived: b.ts is no longer waited for
+    await page.locator('#tree .tr-file[data-file="c.ts"]').click()
+    await expect.poll(() => failed).toEqual(['/repos/repalash/threepipe/contents/b.ts'])
+    heldB.release()
+    heldC.release()
+    await ready(page)
+    await expect(page.locator('.sbs-right .view-lines')).toContainText('new c')
 })

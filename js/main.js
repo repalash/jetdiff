@@ -563,8 +563,12 @@ async function route(force = false) {
 
 async function openTarget(target, file) {
     const id = ++state.loadId
+    // what the load before still asks GitHub for is not needed any more
+    state.loadCtl?.abort()
+    const {signal} = state.loadCtl = new AbortController()
     // the change set shown before is gone: a file of it still loading must not show, and no step or mark acts on it
     state.fileLoadId++
+    state.fileCtl?.abort()
     state.cs = null
     state.order = []
     state.index = -1
@@ -580,12 +584,18 @@ async function openTarget(target, file) {
     buildShell()
     setLoading(true)
     $('#title').textContent = labelForTarget(target)
+    // another pull request's conversation goes, and its load stops
+    if (state.timelineKey && state.timelineKey !== (target.type === 'pr' ? prKey(target) : null)) {
+        state.timelineKey = null
+        state.timelineCtl?.abort()
+        $('#timeline-host').innerHTML = ''
+    }
     state.tree.clear()
     $('#tree').innerHTML = '<div class="tree-msg dim">Loading changes…</div>'
     showMessage('')
     let cs
     try {
-        ;[cs] = await Promise.all([loadChangeSet(target), ensureMonaco()])
+        ;[cs] = await Promise.all([loadChangeSet(target, {signal}), ensureMonaco()])
     } catch (e) {
         if (id !== state.loadId) return
         setLoading(false)
@@ -595,7 +605,7 @@ async function openTarget(target, file) {
     if (id !== state.loadId) return
     // the change set is shown with its edits only: until then, a commit would put edits made on the previous head
     // onto this one
-    const edits = await attachEdits(target, cs, id)
+    const edits = await attachEdits(target, cs, id, signal)
     if (!edits) return
     state.cs = cs
     state.editKey = fullPr(cs) ? prKey(target) : null
@@ -620,7 +630,7 @@ async function openTarget(target, file) {
     else setTab(tab === 'log' && !$('#tab-log').hidden ? 'log' : 'changes')
     state.tree.setFiles(cs.files)
     state.order = state.tree.order
-    loadViewed()
+    loadViewed(signal)
     if (!cs.files.length) {
         setLoading(false)
         updateToolbar()
@@ -920,8 +930,10 @@ async function loadPrList() {
     const id = (state.prlLoad = (state.prlLoad || 0) + 1)
     const list = $('#prl-list')
     list.innerHTML = '<div class="tree-msg dim">Loading…</div>'
+    state.prlCtl?.abort()
+    const {signal} = state.prlCtl = new AbortController()
     try {
-        const prs = await listPullRequests(t.owner, t.repo, {state: state.prlState, text: $('#prl-search').value})
+        const prs = await listPullRequests(t.owner, t.repo, {state: state.prlState, text: $('#prl-search').value, signal})
         if (id !== state.prlLoad) return
         list.innerHTML = prs.map((p) => `
             <a class="prl-item${t.type === 'pr' && t.number === p.number ? ' sel' : ''}" data-n="${esc(p.number)}" href="${esc(prHref(t, p.number))}">
@@ -972,11 +984,6 @@ function renderHeader() {
         : cs.commit ? `Commit ${short(cs.headSha)}` : `Changes Between ${short(cs.baseSha) || '∅'} and ${short(cs.headSha)}`
     $('#side').classList.toggle('is-pr', !!pr)
     renderSideHead()
-    const tlKey = pr ? prKey(target, pr.number) : null
-    if (state.timelineKey && state.timelineKey !== tlKey) {
-        state.timelineKey = null
-        $('#timeline-host').innerHTML = ''
-    }
     renderTabs()
     if (pr) {
         $('#pr-title').innerHTML = `${esc(pr.title)} <span class="dim">#${esc(pr.number)}</span>`
@@ -1206,6 +1213,7 @@ function setTab(tab) {
     state.tab = tab
     for (const k of ['log', 'changes', 'timeline']) $('#tab-' + k).classList.toggle('active', k === tab)
     $('#log-host').hidden = tab !== 'log'
+    state.log?.setShown(tab === 'log')
     $('#timeline-host').hidden = tab !== 'timeline'
     $('#toolbar').hidden = tab !== 'changes'
     $('#viewer').hidden = tab !== 'changes'
@@ -1246,7 +1254,7 @@ function storeViewed(files) {
     store.set(viewedKey(), marks)
 }
 
-async function loadViewed() {
+async function loadViewed(signal) {
     state.viewedRemote = null
     const marks = viewedMarks()
     state.viewed = new Set(state.cs.files.filter((f) => marks[f.path] === fileVersion(f)).map((f) => f.path))
@@ -1255,7 +1263,7 @@ async function loadViewed() {
     if (t.type !== 'pr' || !getToken()) return
     const id = state.loadId
     try {
-        const {id: prId, states} = await getViewedStates(t.owner, t.repo, t.number)
+        const {id: prId, states} = await getViewedStates(t.owner, t.repo, t.number, {signal})
         if (id !== state.loadId) return
         state.viewedRemote = {id: prId}
         state.viewed = new Set([...states].filter(([, s]) => s === 'VIEWED').map(([p]) => p))
@@ -1270,7 +1278,7 @@ async function loadViewed() {
         }
         renderViewed()
     } catch (e) {
-        console.warn('Viewed state from GitHub unavailable; keeping it in this browser', e)
+        if (id === state.loadId) console.warn('Viewed state from GitHub unavailable; keeping it in this browser', e)
     }
 }
 
@@ -1335,9 +1343,20 @@ function reopenFile(keepScroll = true) {
     if (state.index >= 0) openFileAt(state.index, false, keepScroll)
 }
 
-async function contentOf(ref, path) {
+/** A file's content at `ref`; `signal` stops waiting for it (fileLoad). */
+async function contentOf(ref, path, signal) {
     if (!ref) return {text: ''}
-    return getFileContent(state.target.owner, state.target.repo, ref, path)
+    return getFileContent(state.target.owner, state.target.repo, ref, path, {signal})
+}
+
+/**
+ * A new file load's `signal`, for its requests; `joined()`, once it asked for them, stops the load before: what it
+ * asked for and the new one too goes on.
+ */
+function fileLoad() {
+    const before = state.fileCtl
+    const ctl = state.fileCtl = new AbortController()
+    return {signal: ctl.signal, joined: () => before?.abort()}
 }
 
 /** The line changes of a file; an added or removed file is one change. Null once `stale()` (a newer load started). */
@@ -1427,12 +1446,15 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
 
     const {cs} = state
     const origPath = f.prevPath || f.path
+    const {signal, joined} = fileLoad()
+    const loads = [
+        f.status === 'added' ? {text: ''} : contentOf(cs.baseSha, origPath, signal),
+        f.status === 'removed' ? {text: ''} : contentOf(cs.headSha, f.path, signal),
+    ]
+    joined()
     let orig, mod
     try {
-        ;[orig, mod] = await Promise.all([
-            f.status === 'added' ? {text: ''} : contentOf(cs.baseSha, origPath),
-            f.status === 'removed' ? {text: ''} : contentOf(cs.headSha, f.path),
-        ])
+        ;[orig, mod] = await Promise.all(loads)
     } catch (e) {
         if (id !== state.fileLoadId) return
         setLoading(false)
@@ -1531,7 +1553,7 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
     setLoading(false)
     applyEditable()
     updateToolbar()
-    prefetch(i + 1)
+    prefetch(i + 1, signal)
 }
 
 function isMarkdown(path) {
@@ -1768,8 +1790,9 @@ async function openTimeline() {
     if (state.timelineKey === key && host.childElementCount) return
     state.timelineKey = key
     host.innerHTML = '<div class="tl-loading dim">Loading the conversation…</div>'
+    const {signal} = state.timelineCtl = new AbortController()
     try {
-        const [data, desc] = await Promise.all([getTimeline(t.owner, t.repo, pr.number), sanitize(pr.body_html || '')])
+        const [data, desc] = await Promise.all([getTimeline(t.owner, t.repo, pr.number, {signal}), sanitize(pr.body_html || '')])
         if (state.timelineKey !== key) return
         host.innerHTML = await timelineHtml(cs, data, desc)
         host.scrollTop = 0
@@ -2280,7 +2303,7 @@ function flushEdits() {
  * An edit made on another head is carried over when its file is the same at both heads, kept aside (`conflicts`) when
  * it changed, and kept as it is when a read fails (tried again on the next load).
  */
-async function attachEdits(t, cs, id) {
+async function attachEdits(t, cs, id, signal) {
     flushEdits()
     if (!fullPr(cs)) return new Map()
     const key = prKey(t), head = cs.headSha
@@ -2292,7 +2315,7 @@ async function attachEdits(t, cs, id) {
     await Promise.all(held(editStore()[key] || {}).map(async ({path, head: h}) => {
         if (h === head) return same.set(`${h}:${path}`, true)
         try {
-            const [a, b] = await Promise.all([getFileContent(t.owner, t.repo, h, path), getFileContent(t.owner, t.repo, head, path)])
+            const [a, b] = await Promise.all([getFileContent(t.owner, t.repo, h, path, {signal}), getFileContent(t.owner, t.repo, head, path, {signal})])
             same.set(`${h}:${path}`, !a.binary && !b.binary && a.text === b.text)
         } catch (e) {
             // missing at one of the heads: changed
@@ -2651,12 +2674,13 @@ window.addEventListener('beforeunload', (e) => {
     if (state.edits.size) { e.preventDefault(); e.returnValue = '' }
 })
 
-function prefetch(i) {
+/** Reads file `i` ahead, for the load of `signal`: it stops when the next file opens, unless that is this one. */
+function prefetch(i, signal) {
     const f = state.order[i]
     if (!f || isImagePath(f.path)) return
     const {cs} = state
-    if (f.status !== 'added' && cs.baseSha) contentOf(cs.baseSha, f.prevPath || f.path).catch(() => {})
-    if (f.status !== 'removed') contentOf(cs.headSha, f.path).catch(() => {})
+    if (f.status !== 'added' && cs.baseSha) contentOf(cs.baseSha, f.prevPath || f.path, signal).catch(() => {})
+    if (f.status !== 'removed') contentOf(cs.headSha, f.path, signal).catch(() => {})
 }
 
 // Monaco's time for one diff: past it, it gives a coarser diff
@@ -3032,8 +3056,11 @@ async function showOutside(loc) {
     const monaco = state.monaco
     setLoading(true)
     let text = loc.text
+    const {signal, joined} = fileLoad()
     if (!loc.lib) {
-        const c = await contentOf(loc.ref, loc.path).catch((e) => ({error: e}))
+        const load = contentOf(loc.ref, loc.path, signal)
+        joined()
+        const c = await load.catch((e) => ({error: e}))
         if (id !== state.fileLoadId) return
         if (c.error || c.binary) {
             setLoading(false)

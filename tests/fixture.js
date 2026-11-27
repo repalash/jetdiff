@@ -80,13 +80,17 @@ export function fakePr(github, number, files, pr = {}) {
     const R = '/repos/repalash/threepipe'
     const base = fakeSha(0xba5e), head = fakeSha(0xbead)
     const tpl = recorded(`${R}/pulls/193`)
+    // as GitHub lists them (a test may change `files` meanwhile)
+    const listed = () => files.map((f) => ({status: 'modified', additions: 1, deletions: 1, sha: fakeSha(1), ...f, old: undefined, new: undefined}))
     github.handle(({method, path}) => {
         if (method !== 'GET') return
         if (path === `${R}/pulls/${number}`) return {...tpl, number, title: 'A made-up pull request', state: 'open', changed_files: files.length,
             head: {...tpl.head, sha: head}, base: {...tpl.base, sha: base}, ...pr}
-        if (path.startsWith(`${R}/pulls/${number}/commits?`)) return [{sha: head, parents: [{sha: base}], author: null, html_url: `https://github.com${R}/commit/${head}`,
-            commit: {message: 'Change', author: {name: 'A', date: '2026-01-01T00:00:00Z'}, committer: {name: 'A', date: '2026-01-01T00:00:00Z'}}}]
-        if (path.startsWith(`${R}/pulls/${number}/files?`)) return pageOf(path, files).map((f) => ({status: 'modified', additions: 1, deletions: 1, sha: fakeSha(1), ...f, old: undefined, new: undefined}))
+        const commit = {sha: head, parents: [{sha: base}], author: null, html_url: `https://github.com${R}/commit/${head}`,
+            commit: {message: 'Change', author: {name: 'A', date: '2026-01-01T00:00:00Z'}, committer: {name: 'A', date: '2026-01-01T00:00:00Z'}}}
+        if (path.startsWith(`${R}/pulls/${number}/commits?`)) return [commit]
+        if (path.startsWith(`${R}/commits/${head}?`)) return {...commit, files: pageOf(path, listed())}
+        if (path.startsWith(`${R}/pulls/${number}/files?`)) return pageOf(path, listed())
         if (path === `${R}/compare/${base}...${head}?per_page=1`) return {merge_base_commit: {sha: base}, base_commit: {sha: base}}
         for (const f of files) {
             if (path === `${R}/contents/${segments(f.previous_filename || f.filename)}?ref=${base}`) return {raw: f.old ?? ''}
