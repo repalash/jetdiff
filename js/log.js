@@ -84,10 +84,12 @@ export class LogView {
     }
 
     /** `commits` oldest first as GitHub lists them; `selected` is the commit spec in use ('sha' or 'a..b'), if any. */
-    setCommits(commits, {owner, repo, selected, headRef}) {
+    /** `total`: how many the pull request or compare has, when `commits` holds only some. */
+    setCommits(commits, {owner, repo, selected, headRef, total = 0}) {
         this.owner = owner
         this.repo = repo
         this.headRef = headRef
+        this.total = total
         this.commits = [...commits].reverse()
         this.sel = null
         if (selected) {
@@ -118,7 +120,7 @@ export class LogView {
     render() {
         const f = this.filter
         const n = this.commits.length
-        this.el.querySelector('#log-count').textContent = plural(n, 'commit')
+        this.el.querySelector('#log-count').textContent = this.total ? `${n} of ${plural(this.total, 'commit')}` : plural(n, 'commit')
         this.list.innerHTML = this.commits.map((c, i) => {
             const msg = firstLine(c.commit.message)
             if (f && !msg.toLowerCase().includes(f) && !c.sha.startsWith(f) && !(c.author?.login || '').toLowerCase().includes(f)) return ''
@@ -174,10 +176,11 @@ export class LogView {
         this.ctl?.abort()
         const {signal} = this.ctl = new AbortController()
         try {
-            const files = await getCommitFiles(this.owner, this.repo, older.sha, newer.sha, older.parents?.[0]?.sha, {signal})
+            const {files, incomplete} = await getCommitFiles(this.owner, this.repo, older.sha, newer.sha, older.parents?.[0]?.sha, {signal})
             if (id !== this.loadId) return
             this.tree.setFiles(files)
-            this.filesCount.textContent = plural(files.length, 'file')
+            this.filesCount.textContent = incomplete ? `${files.length}+ files` : plural(files.length, 'file')
+            this.filesCount.title = incomplete ? `The list may be incomplete: GitHub lists at most ${incomplete.limit} files` : ''
         } catch (e) {
             if (id !== this.loadId || signal.aborted) return
             this.treeEl.innerHTML = `<div class="tree-msg dim">${esc(e.message)}

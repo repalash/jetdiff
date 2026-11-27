@@ -398,20 +398,24 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
 
 const json = async (path, opts) => (await request(path, opts)).json()
 
+/** A list GitHub gives 100 a page, read up to `max` pages: {items, more}, `more` when the last page read was full. */
 async function paginate(path, max = 30, opts) {
-    const out = []
+    const items = []
     const sep = path.includes('?') ? '&' : '?'
     for (let page = 1; page <= max; page++) {
-        const items = await json(`${path}${sep}per_page=100&page=${page}`, opts)
-        out.push(...items)
-        if (items.length < 100) break
+        const got = await json(`${path}${sep}per_page=100&page=${page}`, opts)
+        items.push(...got)
+        if (got.length < 100) return {items, more: false}
     }
-    return out
+    return {items, more: true}
 }
 
-// GitHub's limits: a compare lists up to 300 files (on its first page only), a commit and a pull request up to 3000
+// GitHub's limits: a compare lists up to 300 files (on its first page only), a commit and a pull request up to 3000; a
+// pull request up to 250 commits (and a compare's 300 are read)
 const COMPARE_FILES = 300
 const MAX_FILES = 3000
+const PR_COMMITS = 250
+const COMPARE_COMMITS = 300
 
 /** A target from a GitHub pull request, commit or compare URL, or from `o/r#12` or `o/r/12`; else null. */
 export function parseTarget(input) {
@@ -515,10 +519,12 @@ function directFiles(toHead, toBase) {
 const isSha = (s) => /^[0-9a-f]{40}$/i.test(s)
 
 /**
- * `{title, owner, repo, baseSha, headSha, files, htmlUrl, pr?, commits?, commit?, range?, noMergeBase?, incomplete?}`.
- * A PR's base is the merge base, as in GitHub's "Files changed"; with `target.commit` (a sha or `a..b`), only those
- * commits of the PR. `noMergeBase`: the merge base could not be read, so the base is the base branch's tip.
- * `incomplete`: {shown, total?, limit}, GitHub listed only some of the files (it lists up to `limit`).
+ * `{title, owner, repo, baseSha, headSha, files, htmlUrl, pr?, commits?, commit?, range?, noMergeBase?, incomplete?,
+ * commitsIncomplete?, commitsError?}`. A PR's base is the merge base, as in GitHub's "Files changed"; with
+ * `target.commit` (a sha or `a..b`), only those commits of the PR. `noMergeBase`: the merge base could not be read, so
+ * the base is the base branch's tip. `incomplete`: {shown, total?, limit}, GitHub listed only some of the files (it
+ * lists up to `limit`); `commitsIncomplete` the same for the commits. `commitsError`: why a PR's commits could not be
+ * read (`commits` is empty then).
  */
 export async function loadChangeSet(target, {signal} = {}) {
     const {owner, repo} = target
@@ -527,14 +533,16 @@ export async function loadChangeSet(target, {signal} = {}) {
     // `reached`: the most GitHub listed in one answer
     const incomplete = (shown, total, limit, reached = shown) => (total ? total > shown : reached >= limit) ? {incomplete: {shown, total, limit}} : {}
     if (target.type === 'pr') {
-        const [pr, commits] = await Promise.all([
+        const [pr, listed] = await Promise.all([
             json(`${R}/pulls/${target.number}`, {accept: FULL, signal}),
-            paginate(`${R}/pulls/${target.number}/commits`, 3, opts).catch((e) => { if (signal?.aborted) throw e; return [] }),
+            paginate(`${R}/pulls/${target.number}/commits`, 3, opts).catch((e) => { if (signal?.aborted) throw e; return {error: e} }),
         ])
+        const commits = listed.items || []
         const base = {
             owner, repo, pr, commits,
             title: pr.title,
             htmlUrl: pr.html_url,
+            ...listed.error ? {commitsError: listed.error.message} : pr.commits > commits.length && {commitsIncomplete: {shown: commits.length, total: pr.commits, limit: PR_COMMITS}},
         }
         if (target.commit?.includes('..')) {
             const [a, b] = target.commit.split(/\.{2,3}/)
@@ -552,7 +560,7 @@ export async function loadChangeSet(target, {signal} = {}) {
             return {...base, ...c, commit: c.commitInfo, htmlUrl: `${pr.html_url}/commits/${c.headSha}`}
         }
         const mergeBase = () => json(`${R}/compare/${pr.base.sha}...${pr.head.sha}?per_page=1`, opts)
-        const [files, cmp] = await Promise.all([
+        const [{items: files}, cmp] = await Promise.all([
             paginate(`${R}/pulls/${target.number}/files`, MAX_FILES / 100, opts),
             mergeBase().catch(() => signal?.aborted ? null : mergeBase()).catch(() => null),
         ])
@@ -592,6 +600,7 @@ export async function loadChangeSet(target, {signal} = {}) {
         const url = (ref) => ref.split('/').map(encodeURIComponent).join('/')
         return {
             owner, repo, commits,
+            ...commits.length < total && {commitsIncomplete: {shown: commits.length, total, limit: COMPARE_COMMITS}},
             title: `${target.base}${compareDots(target)}${target.head}`,
             htmlUrl: target.dots === '..' ? `https://github.com/${owner}/${repo}/compare/${url(target.base)}..${url(target.head)}` : cmp.html_url,
             baseSha: target.dots === '..' ? cmp.base_commit?.sha : cmp.merge_base_commit?.sha || cmp.base_commit?.sha,
@@ -604,11 +613,19 @@ export async function loadChangeSet(target, {signal} = {}) {
 }
 
 const filesCache = new Map()
-/** The changed files of one commit, or of the range from `first`'s parent to `last`. */
+/**
+ * The changed files of one commit, or of the range from `first`'s parent to `last`: {files, incomplete?}, as
+ * loadChangeSet has them.
+ */
 export function getCommitFiles(owner, repo, first, last, parentOfFirst, {signal} = {}) {
-    return memo(filesCache, `${owner}/${repo}/${first}..${last}`, (s) => first === last
-        ? loadCommit(owner, repo, first, {signal: s}).then((c) => c.files)
-        : json(`/repos/${owner}/${repo}/compare/${parentOfFirst || first + '^'}...${last}?per_page=100`, {signal: s}).then((c) => mapFiles(c.files || [])), signal)
+    return memo(filesCache, `${owner}/${repo}/${first}..${last}`, async (s) => {
+        if (first === last) {
+            const c = await loadCommit(owner, repo, first, {signal: s})
+            return {files: c.files, ...c.incomplete && {incomplete: c.incomplete}}
+        }
+        const files = (await json(`/repos/${owner}/${repo}/compare/${parentOfFirst || first + '^'}...${last}?per_page=100`, {signal: s})).files || []
+        return {files: mapFiles(files), ...files.length >= COMPARE_FILES && {incomplete: {shown: files.length, limit: COMPARE_FILES}}}
+    }, signal)
 }
 
 async function loadCommit(owner, repo, sha, opts) {
@@ -858,25 +875,36 @@ export async function getGitCommit(owner, repo, sha) {
     return json(`/repos/${owner}/${repo}/git/commits/${sha}`)
 }
 
+// a pull request's conversation: the first 500 comments, reviews and inline comments
+const TIMELINE_PAGES = 5
+export const TIMELINE_MAX = TIMELINE_PAGES * 100
+
 /**
- * `{comments, reviews, inline, reactions}` of a PR, bodies with GitHub's HTML; `reactions` are the description's (the
- * pull request answer has none, its issue has), null where they could not be read.
+ * `{comments, reviews, inline, reactions, cut, missing}` of a PR, bodies with GitHub's HTML; `reactions` are the
+ * description's (the pull request answer has none, its issue has). `cut`: the lists read only in part ('comments',
+ * 'reviews', 'inline'), up to TIMELINE_PAGES pages; `missing`: what could not be read ('inline', 'reactions').
  */
 export async function getTimeline(owner, repo, number, {signal} = {}) {
     const R = `/repos/${owner}/${repo}`
-    const list = (path) => paginate(`${R}/${path}`, 5, {accept: FULL, signal})
+    const list = (path) => paginate(`${R}/${path}`, TIMELINE_PAGES, {accept: FULL, signal})
+    const failed = (e) => { if (signal?.aborted) throw e; return null }
     const [comments, reviews, inline, issue] = await Promise.all([
         list(`issues/${number}/comments`),
         list(`pulls/${number}/reviews`),
-        list(`pulls/${number}/comments`).catch(() => []),
-        json(`${R}/issues/${number}`, {signal}).catch(() => null),
+        list(`pulls/${number}/comments`).catch(failed),
+        json(`${R}/issues/${number}`, {signal}).catch(failed),
     ])
-    return {comments, reviews, inline, reactions: issue?.reactions || null}
+    const lists = {comments, reviews, inline}
+    return {
+        comments: comments.items, reviews: reviews.items, inline: inline?.items || [], reactions: issue?.reactions || null,
+        cut: Object.keys(lists).filter((k) => lists[k]?.more),
+        missing: [!inline && 'inline', !issue && 'reactions'].filter(Boolean),
+    }
 }
 
 /** All open pull requests ({number, title}), from the REST list, which has no search limit. */
 export async function listOpenPulls(owner, repo, {signal} = {}) {
-    return (await paginate(`/repos/${owner}/${repo}/pulls?state=open`, 10, {signal})).map((p) => ({number: p.number, title: p.title}))
+    return (await paginate(`/repos/${owner}/${repo}/pulls?state=open`, 10, {signal})).items.map((p) => ({number: p.number, title: p.title}))
 }
 
 /** The repositories a snapshot holds ([{owner, repo, prs}]) when it was recorded with --repos, else null. */

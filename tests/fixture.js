@@ -82,9 +82,12 @@ export function fakePr(github, number, files, pr = {}) {
     const tpl = recorded(`${R}/pulls/193`)
     // as GitHub lists them (a test may change `files` meanwhile)
     const listed = () => files.map((f) => ({status: 'modified', additions: 1, deletions: 1, sha: fakeSha(1), ...f, old: undefined, new: undefined}))
-    github.handle(({method, path}) => {
+    github.handle(({method, path, body}) => {
+        // GitHub's Viewed states: none viewed
+        if (path === '/graphql' && body?.query.includes('viewerViewedState') && body.variables.n === number)
+            return {data: {repository: {pullRequest: {id: `PR_${number}`, files: {pageInfo: {hasNextPage: false}, nodes: []}}}}}
         if (method !== 'GET') return
-        if (path === `${R}/pulls/${number}`) return {...tpl, number, title: 'A made-up pull request', state: 'open', changed_files: files.length,
+        if (path === `${R}/pulls/${number}`) return {...tpl, number, title: 'A made-up pull request', state: 'open', changed_files: files.length, commits: 1,
             head: {...tpl.head, sha: head}, base: {...tpl.base, sha: base}, ...pr}
         const commit = {sha: head, parents: [{sha: base}], author: null, html_url: `https://github.com${R}/commit/${head}`,
             commit: {message: 'Change', author: {name: 'A', date: '2026-01-01T00:00:00Z'}, committer: {name: 'A', date: '2026-01-01T00:00:00Z'}}}

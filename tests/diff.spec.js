@@ -110,7 +110,7 @@ test('when the merge base cannot be read, it is asked again, then the page says 
     await page.goto(`./?pr=${PR}`)
     await ready(page)
     expect(asked).toBe(2)
-    await expect(page.locator('#toasts')).toContainText('not where the pull request branched off')
+    await expect(page.locator('#notes')).toContainText('not where the pull request branched off')
 })
 
 test('a list of files GitHub cut short says so', async ({page}) => {
@@ -118,7 +118,7 @@ test('a list of files GitHub cut short says so', async ({page}) => {
     page.github.handle(({path}) => path === `${R}/pulls/193` && {...pr, changed_files: 3500})
     await page.goto(`./?pr=${PR}`)
     await ready(page)
-    await expect(page.locator('#toasts')).toContainText('Showing 5 of 3500 changed files')
+    await expect(page.locator('#notes')).toContainText('Showing 5 of 3500 changed files')
 
     const files = Array.from({length: 300}, (_, i) => ({filename: `f${i}.txt`, status: 'modified', additions: 1, deletions: 1}))
     page.github.handle(({path}) => path === `${R}/compare/main...many?per_page=100` && {total_commits: 1, commits: [commit(1)], files,
@@ -126,7 +126,7 @@ test('a list of files GitHub cut short says so', async ({page}) => {
     anyContents(page.github, (ref) => ref)
     await page.goto('./?compare=repalash/threepipe/main...many')
     await ready(page)
-    await expect(page.locator('#toasts')).toContainText('may be incomplete')
+    await expect(page.locator('#notes')).toContainText('may be incomplete')
 })
 
 test('GitHub links to a range of a pull request and to a two-dot compare open what they show', async ({page}) => {

@@ -1,4 +1,4 @@
-import {test, expect, ready, fakePr} from './fixture.js'
+import {test, expect, ready, fakePr, recorded, PR} from './fixture.js'
 
 // Big pull requests: memory across files, the tree, huge files, partial data, the API budget and failures
 const lines = (n, f = (i) => `export const v${i} = ${i}`) => Array.from({length: n}, (_, i) => f(i + 1)).join('\n') + '\n'
@@ -137,6 +137,58 @@ test('the Log reads the selected commit\'s files when it is first shown, not bef
     await page.locator('#tab-log').click()
     await expect(page.locator('#log-tree .tr-file')).toHaveCount(1)
     expect(commitFiles()).toHaveLength(1)
+})
+
+test.describe('data GitHub gave in part, or not at all, says so', () => {
+    const R = '/repos/repalash/threepipe'
+    const failing = (status = 502) => ({status, body: {message: 'Server Error'}})
+
+    test('commits that could not be read, and the notice stays until closed', async ({page}) => {
+        const n = ++number
+        page.github.handle(({path}) => path.startsWith(`${R}/pulls/${n}/commits?`) && failing())
+        const pr = fakePr(page.github, n, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
+        await page.goto(pr.url)
+        await ready(page)
+        await expect(page.locator('#notes')).toContainText('The commits of the pull request could not be read')
+        await expect(page.locator('#pr-commits')).toHaveText('commits not read')
+        await page.waitForTimeout(13000)
+        await expect(page.locator('#notes .note')).toHaveCount(1)
+        await page.locator('#notes .note-x').click()
+        await expect(page.locator('#notes')).toBeHidden()
+    })
+
+    test('a pull request with more commits than GitHub lists', async ({page}) => {
+        const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}], {commits: 400})
+        await page.goto(pr.url)
+        await ready(page)
+        await expect(page.locator('#notes')).toContainText('Showing 1 of 400 commits: GitHub lists at most 250 of a pull request')
+        await page.locator('#tab-log').click()
+        await expect(page.locator('#log-count')).toHaveText('1 of 400 commits')
+    })
+
+    test('a conversation read in part', async ({page}) => {
+        const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
+        page.github.handle(({path}) => path.startsWith(`${R}/pulls/${number}/comments?`) ? failing()
+            : path.startsWith(`${R}/issues/${number}/comments?`) ? Array.from({length: 100}, (_, i) => ({id: i, user: null, body_html: `<p>c${i}</p>`, created_at: '2026-01-01T00:00:00Z'}))
+                : path.startsWith(`${R}/pulls/${number}/reviews?`) ? [] : path === `${R}/issues/${number}` ? failing() : undefined)
+        await page.goto(pr.url)
+        await ready(page)
+        await page.locator('#pr-timeline').click()
+        await expect(page.locator('.tl-desc')).toBeVisible()
+        await expect(page.locator('.tl-partial')).toContainText(['Only the first 500 comments', 'The inline comments could not be read', 'The reactions to the description could not be read'])
+    })
+
+    test('the Log\'s files of a range of commits, cut at 300', async ({page}) => {
+        const commits = recorded(`${R}/pulls/193/commits?per_page=100&page=1`)
+        page.github.handle(({path}) => path === `${R}/compare/${commits[0].parents[0].sha}...${commits[2].sha}?per_page=100`
+            && {files: Array.from({length: 300}, (_, i) => ({filename: `f${i}.txt`, status: 'modified', additions: 1, deletions: 1}))})
+        await page.goto(`./?pr=${PR}`)
+        await ready(page)
+        await page.locator('#tab-log').click()
+        await page.locator('.lr[data-i="2"]').click({modifiers: ['Shift']})
+        await expect(page.locator('#log-files-count')).toHaveText('300+ files')
+        await expect(page.locator('#log-files-count')).toHaveAttribute('title', /GitHub lists at most 300/)
+    })
 })
 
 /** `n` files in `dirs` folders, each a one-line change. */

@@ -64,8 +64,11 @@ The URL follows the open tabs in place (a reload, or a shared link, opens them a
 them): `tabs` lists the tabs open besides the diff when they are not the default, the Log alone (`tabs=` with none),
 and `tab` names the one in front when it is not the diff.
 
-GitHub lists at most 3000 files of a pull request or a commit, and 300 of a compare: a notice says when a list is cut
-short, and when the merge base could not be read (the diff is then against the base branch's tip).
+GitHub lists at most 3000 files of a pull request or a commit, and 300 of a compare, and at most 250 commits of a pull
+request (jetdiff reads the first 300 of a compare): a note over the diff says when a list is cut short, when the commits
+or GitHub's Viewed marks could not be read, and when the merge base could not be read (the diff is then against the
+base branch's tip); it stays until closed. The Log says so of a commit's or a range's files, and the Timeline when it
+shows only part of the conversation (its first 500 comments) or could not read its inline comments or reactions.
 
 A request that GitHub does not answer for 30 seconds is given up: the changes, a file or the Timeline that waited on
 it says so, with Retry.

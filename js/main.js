@@ -1,7 +1,7 @@
 import {
     accountIdentity, answerSnapshot, authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
     httpsUrl, otherSite, PACK_ANSWER, paramsToTarget, RATE_LIMITED, parseTarget, listPullRequests, searchCode, searchMyPullRequests, setFileViewed, setSnapshot, setToken, snapshotInfo, snapshotName, snapshotRepos,
-    snapshotToAsk, targetToParams,
+    snapshotToAsk, targetToParams, TIMELINE_MAX,
 } from './github.js'
 import {
     applyTheme, applyThemeCss, DEFAULT_THEME, ensureLanguage, fullWidthSelection, HOVER, languageForPath, languageName, loadMonaco,
@@ -477,6 +477,7 @@ const state = {
     back: [], // Go to Declaration's locations to go back to, and forward again
     forward: [],
     outside: null, // the file shown outside the changes (Go to Declaration): its location, with its language
+    notes: [], // what the change set shown leaves out or could not read (changeSetNotices)
 }
 
 const currentFile = () => state.order[state.index]
@@ -574,6 +575,7 @@ async function openTarget(target, file) {
     state.index = -1
     state.target = target
     state.ready = false
+    state.notes = []
     state.offlineCopy = false
     state.packAnswered = false
     renderOffline()
@@ -582,6 +584,7 @@ async function openTarget(target, file) {
     $('#landing').hidden = true
     $('#app').hidden = false
     buildShell()
+    renderNotes()
     setLoading(true)
     $('#title').textContent = labelForTarget(target)
     // another pull request's conversation goes, and its load stops
@@ -640,12 +643,32 @@ async function openTarget(target, file) {
     await openFileAt(start >= 0 ? start : 0, false)
 }
 
-/** What the change set leaves out, said once per load. */
+/** What the change set leaves out or could not read: notes over the view, until closed or the next load. */
 function changeSetNotices(cs) {
-    if (cs.noMergeBase) toast(`GitHub did not give the merge base: the diff is against the tip of ${cs.pr.base.ref}, not where the pull request branched off, so it can show changes made on ${cs.pr.base.ref} since`, 'error', 12000)
-    const n = cs.incomplete
-    if (n) toast(n.total ? `Showing ${n.shown} of ${n.total} changed files: GitHub lists at most ${n.limit}`
-        : `The list of files may be incomplete: GitHub lists at most ${n.limit}`, 'error', 12000)
+    const base = cs.pr?.base.ref
+    const n = cs.incomplete, c = cs.commitsIncomplete
+    state.notes = [
+        cs.noMergeBase && `GitHub did not give the merge base: the diff is against the tip of ${base}, not where the pull request branched off, so it can show changes made on ${base} since.`,
+        n && (n.total ? `Showing ${n.shown} of ${n.total} changed files: GitHub lists at most ${n.limit}.`
+            : `The list of files may be incomplete: GitHub lists at most ${n.limit}.`),
+        cs.commitsError && `The commits of the pull request could not be read (${cs.commitsError}): the Log and the commit list are empty. Reload to try again.`,
+        c && (cs.pr ? `Showing ${c.shown} of ${c.total} commits: GitHub lists at most ${c.limit} of a pull request.`
+            : `Showing the first ${c.shown} of ${c.total} commits: the Log reads at most ${c.limit}.`),
+    ].filter(Boolean)
+    renderNotes()
+}
+
+/** Adds a note over the view, for the change set shown. */
+function addNote(text) {
+    state.notes.push(text)
+    renderNotes()
+}
+
+function renderNotes() {
+    const el = $('#notes')
+    el.hidden = !state.notes.length
+    el.innerHTML = state.notes.map((t, i) => `<div class="note" role="status">${icons.info}<span class="note-text">${esc(t)}</span>
+        <button class="tb-btn note-x" data-i="${i}" title="Close">${icons.close}</button></div>`).join('')
 }
 
 async function ensureMonaco() {
@@ -743,6 +766,7 @@ function buildShell() {
                     <button class="tab active" id="tab-changes">${icons.changes}<span id="tab-label">Changes</span></button>
                     <button class="tab" id="tab-timeline" hidden>${icons.comment}<span>Timeline</span><i class="tab-x" data-close="timeline" title="Close">${icons.close}</i></button>
                 </div>
+                <div class="notes" id="notes" hidden></div>
                 <div class="log-host" id="log-host" hidden></div>
                 <div class="timeline-host" id="timeline-host" hidden></div>
                 <div class="toolbar" id="toolbar">
@@ -793,6 +817,12 @@ function buildShell() {
         onToggleViewed: (path) => { const f = state.order.find((x) => x.path === path); if (f) toggleViewed(f, !state.viewed.has(path)) },
     })
     $('#pr-commits').onclick = (e) => commitMenu(e.currentTarget)
+    $('#notes').onclick = (e) => {
+        const x = e.target.closest('.note-x')
+        if (!x) return
+        state.notes.splice(+x.dataset.i, 1)
+        renderNotes()
+    }
     $('#pr-clear').onclick = () => navigateHere({...state.target, commit: undefined})
     $('#strip-prs').onclick = () => setSidePanel(state.sidePanel === 'prs' ? 'changes' : 'prs')
     $('#strip-commit').onclick = () => setSidePanel(state.sidePanel === 'commit' ? 'changes' : 'commit')
@@ -956,6 +986,9 @@ function dayOf(iso) {
 function openDrawer() { document.body.classList.add('drawer-open') }
 function closeDrawer() { document.body.classList.remove('drawer-open') }
 
+/** '3 commits', or '250 of 400 commits' when GitHub listed only some. */
+const commitCount = (cs) => cs.commitsIncomplete ? `${cs.commits.length} of ${plural(cs.commitsIncomplete.total, 'commit')}` : plural(cs.commits?.length || 0, 'commit')
+
 function renderHeader() {
     const {cs, target} = state
     const pr = cs.pr
@@ -977,8 +1010,9 @@ function renderHeader() {
     const range = cs.range && `${short(cs.range[0])}..${short(cs.range[1])}`
     if (cs.commits?.length) {
         state.log ??= new LogView($('#log-host'), {onOpen: openCommitSpec, onSelect: (html) => { $('#st-log-sel').innerHTML = html }})
-        $('#st-log-n').innerHTML = `${icons.log}${plural(cs.commits.length, 'commit')}${pr ? ` on ${esc(pr.head.ref)}` : ''}`
-        state.log.setCommits(cs.commits, {owner: target.owner, repo: target.repo, selected: selectedCommit(target), headRef: pr?.head.ref})
+        $('#st-log-n').innerHTML = `${icons.log}${commitCount(cs)}${pr ? ` on ${esc(pr.head.ref)}` : ''}`
+        state.log.setCommits(cs.commits, {owner: target.owner, repo: target.repo, selected: selectedCommit(target), headRef: pr?.head.ref,
+            total: cs.commitsIncomplete?.total})
     }
     state.sideTitle = range ? `Commits ${range}`
         : cs.commit ? `Commit ${short(cs.headSha)}` : `Changes Between ${short(cs.baseSha) || '∅'} and ${short(cs.headSha)}`
@@ -988,7 +1022,7 @@ function renderHeader() {
     if (pr) {
         $('#pr-title').innerHTML = `${esc(pr.title)} <span class="dim">#${esc(pr.number)}</span>`
         $('#pr-link').href = githubUrl(pr.html_url)
-        $('#pr-commits').innerHTML = (range || (cs.commit ? `commit ${short(cs.headSha)}` : plural(cs.commits?.length || 0, 'commit'))) + icons.chevronDown
+        $('#pr-commits').innerHTML = (range || (cs.commit ? `commit ${short(cs.headSha)}` : cs.commitsError ? 'commits not read' : commitCount(cs))) + icons.chevronDown
         $('#pr-clear').hidden = !(cs.commit || cs.range)
         $('#pr-branch').innerHTML = `${icons.tag}<span>${esc(pr.head.ref)}</span>`
         $('#pr-branch').title = `${pr.head.label} → ${pr.base.label}`
@@ -1256,6 +1290,7 @@ function storeViewed(files) {
 
 async function loadViewed(signal) {
     state.viewedRemote = null
+    state.viewedError = null
     const marks = viewedMarks()
     state.viewed = new Set(state.cs.files.filter((f) => marks[f.path] === fileVersion(f)).map((f) => f.path))
     renderViewed()
@@ -1278,7 +1313,13 @@ async function loadViewed(signal) {
         }
         renderViewed()
     } catch (e) {
-        if (id === state.loadId) console.warn('Viewed state from GitHub unavailable; keeping it in this browser', e)
+        if (id !== state.loadId) return
+        console.warn('Viewed state from GitHub unavailable; keeping it in this browser', e)
+        // offline, the marks wait for the network as the offline pill says
+        if (e.status === 503 || !navigator.onLine) return
+        state.viewedError = e.message
+        renderViewed()
+        addNote(`GitHub's Viewed marks could not be read (${e.message}): the marks shown are this browser's, and new ones stay here.`)
     }
 }
 
@@ -1295,7 +1336,8 @@ function renderViewed() {
     const total = state.cs?.files.length || 0
     const n = state.cs ? state.cs.files.filter((f) => state.viewed.has(f.path)).length : 0
     $('#viewed-count').innerHTML = total ? `${icons.eye}<span>${n} / ${total} viewed</span>` : ''
-    $('#viewed-count').title = state.viewedRemote ? 'Viewed files (synced with GitHub)' : 'Viewed files (kept in this browser; add a token to sync with GitHub)'
+    $('#viewed-count').title = state.viewedRemote ? 'Viewed files (synced with GitHub)'
+        : state.viewedError ? 'Viewed files (kept in this browser: GitHub\'s could not be read)' : 'Viewed files (kept in this browser; add a token to sync with GitHub)'
     const f = currentFile()
     $('#chk-viewed').checked = !!f && state.viewed.has(f.path)
 }
@@ -1825,7 +1867,7 @@ function reactionsHtml(r) {
     return `<div class="tl-reacts">${on.map(([k, emoji, name]) => `<span class="tl-react" title="${people(+r[k])} reacted with ${name}">${emoji}<span>${+r[k]}</span></span>`).join('')}</div>`
 }
 
-async function timelineHtml(cs, {comments, reviews, inline, reactions}, desc) {
+async function timelineHtml(cs, {comments, reviews, inline, reactions, cut, missing}, desc) {
     const pr = cs.pr
     const who = (u, name) => u
         ? `<img class="tl-av" src="${esc(u.avatar_url)}${u.avatar_url?.includes('?') ? '&' : '?'}s=48" alt="" loading="lazy" crossorigin="anonymous"><b>${esc(u.login)}</b>`
@@ -1885,10 +1927,16 @@ async function timelineHtml(cs, {comments, reviews, inline, reactions}, desc) {
         }
     }
     const s = prState(pr)
-    return `<div class="tl">
+    const LISTS = {comments: 'comments', reviews: 'reviews', inline: 'inline comments'}
+    const partial = [
+        ...cut.map((k) => `Only the first ${TIMELINE_MAX} ${LISTS[k]} are shown: GitHub has more.`),
+        missing.includes('inline') && 'The inline comments could not be read.',
+        missing.includes('reactions') && 'The reactions to the description could not be read.',
+    ].filter(Boolean)
+    return `<div class="tl">${partial.map((t) => `<div class="note tl-partial" role="status">${icons.info}<span class="note-text">${esc(t)}</span></div>`).join('')}
         <header class="tl-head"><h1>${esc(pr.title)} <span class="dim">#${esc(pr.number)}</span></h1>
             <div class="tl-sub"><span class="state-pill st-${esc(s)}">${esc(cap(s))}</span>
-            <span><b>${esc(pr.user?.login || '')}</b> ${pr.merged_at ? 'merged' : 'wants to merge'} ${plural(cs.commits?.length || 0, 'commit')} into <code>${esc(pr.base.ref)}</code> from <code>${esc(pr.head.label)}</code></span></div></header>
+            <span><b>${esc(pr.user?.login || '')}</b> ${pr.merged_at ? 'merged' : 'wants to merge'} ${plural(pr.commits ?? cs.commits?.length ?? 0, 'commit')} into <code>${esc(pr.base.ref)}</code> from <code>${esc(pr.head.label)}</code></span></div></header>
         <div class="tl-item tl-card tl-desc"><div class="tl-meta">${who(pr.user)} <span class="dim">opened this pull request</span> ${when(pr.created_at)}</div>
             <article class="md tl-body">${desc || '<p class="dim">No description provided.</p>'}</article>${reactionsHtml(reactions)}</div>
         ${out}

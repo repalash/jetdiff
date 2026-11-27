@@ -20,6 +20,7 @@ export const icons = {
     chevronDown: svg('<path d="M4 6l4 4 4-4"/>'),
     chevronRight: svg('<path d="M6 4l4 4-4 4"/>'),
     close: svg('<path d="M4 4l8 8M12 4l-8 8"/>'),
+    info: svg('<circle cx="8" cy="8" r="6"/><path d="M8 7.5v3.5M8 5v.01"/>'),
     collapse: svg('<path d="M4 2.5l4 4 4-4M4 13.5l4-4 4 4"/>'),
     expand: svg('<path d="M4 6.5l4-4 4 4M4 9.5l4 4 4-4"/>'),
     lock: svg('<rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>'),
