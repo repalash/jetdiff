@@ -1372,7 +1372,7 @@ async function toggleViewed(file, viewed) {
             const queued = store.get(pendingKey(), {})[file.path]
             if (queued !== undefined && !!queued !== viewed) dropPending(pendingKey(), file.path, queued)
         } catch (e) {
-            if (e.network || !navigator.onLine) {
+            if (e.network || e.status === 503 || !navigator.onLine) {
                 pend()
                 storeViewed(state.cs.files)
                 return
@@ -2693,7 +2693,7 @@ async function doCommit() {
         if (await waitForHead(sha, ++state.commitGen)) reloadTarget()
     } catch (err) {
         let m = errorText(err)
-        if (err.network || !navigator.onLine) m = state.editsUnsaved
+        if (err.network || err.status === 503 || !navigator.onLine) m = state.editsUnsaved
             ? 'No network, and this device could not save your edits: keep this tab open, and Commit and Push once you are online again.'
             : 'No network: your edits are kept on this device. Commit and Push once you are online again.'
         else if (err.status === 403 || err.status === 404) m += `. The token needs Contents: write on ${pr.head.repo.full_name}.`
