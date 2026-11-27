@@ -89,6 +89,27 @@ test.describe('a request GitHub does not answer', () => {
         await expect(page.locator('.sbs-right .view-lines')).toContainText('new a')
     })
 
+    test.describe('signed in', () => {
+        test.use({token: true})
+
+        test('a Viewed mark with no answer is queued, not reverted: GitHub may have saved it', async ({page}) => {
+            const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
+            let armed = false
+            const held = await gate(page, (u) => armed && u.pathname === '/graphql')
+            await page.goto(pr.url)
+            await ready(page)
+            armed = true
+            await page.locator('#chk-viewed').check()
+            await expect.poll(() => held.seen).toBe(1)
+            await stall(page)
+            const key = `jd.viewed.repalash/threepipe/#${number}.pending`
+            await expect.poll(() => page.evaluate((k) => Object.keys(JSON.parse(localStorage.getItem(k)) || {}), key)).toEqual(['a.ts'])
+            await expect(page.locator('#chk-viewed')).toBeChecked()
+            await expect(page.locator('#toasts')).not.toContainText('did not save')
+            held.release()
+        })
+    })
+
     test('stops the change set\'s load: the start page says so, and Retry opens it', async ({page}) => {
         const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
         const held = await gate(page, (u) => u.pathname === `/repos/repalash/threepipe/pulls/${number}`)
@@ -321,6 +342,13 @@ test.describe('a link that opens nothing says why', () => {
         await expect(page.locator('#land-error')).toContainText('/repalash/threepipe/pull/abc is not a pull request, commit or compare')
         // said once: the URL is the start page's again
         expect(new URL(page.url()).search).toBe('')
+    })
+
+    test('a made-up ?path= shows none of its words', async ({page}) => {
+        await page.goto('./?path=' + encodeURIComponent('/x — your session expired, sign in at example.com'))
+        await expect(page.locator('#landing')).toBeVisible()
+        await expect(page.locator('#land-error')).toHaveCount(0)
+        await expect(page.locator('#landing')).not.toContainText('example.com')
     })
 
     test('a file the changes do not have', async ({page}) => {

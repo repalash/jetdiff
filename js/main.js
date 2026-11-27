@@ -566,9 +566,11 @@ async function route(force = false) {
         state.packAnswered = false
         renderRecordedBar()
         // a GitHub-style path that is no GitHub link comes from 404.html (redirect.js): said once
-        const path = params.get('path')
+        let path = params.get('path')
         if (path) dropParam('path')
-        const why = path ? `${location.host}${path} is not a pull request, commit or compare: a GitHub link with github.com replaced by ${location.host} opens one, as in ${location.host}/owner/repo/pull/123`
+        // only a path is said back: a link made up to show other words there shows none
+        if (!/^\/\S{0,200}$/.test(path || '')) path = null
+        const why = path ?`${location.host}${path} is not a pull request, commit or compare: a GitHub link with github.com replaced by ${location.host} opens one, as in ${location.host}/owner/repo/pull/123`
             : targetParamsError(params)
         return showLanding(why ? {title: 'This link opens nothing', message: why} : null)
     }
@@ -1414,7 +1416,8 @@ async function toggleViewed(file, viewed) {
             const queued = store.get(pendingKey(), {})[file.path]
             if (queued !== undefined && !!queued !== viewed) dropPending(pendingKey(), file.path, queued)
         } catch (e) {
-            if (e.network || e.status === 503 || !navigator.onLine) {
+            // a mark with no answer may have been saved: queued, it is set again (to the same) on the next load
+            if (e.network || e.stalled || e.status === 503 || !navigator.onLine) {
                 pend()
                 storeViewed(state.cs.files)
                 return
@@ -2642,7 +2645,10 @@ function dropShelved(key, id, paths) {
 function leaveShelved(path) {
     state.shelfShown = null
     const i = state.order.findIndex((f) => f.path === path)
-    openFileAt(i >= 0 ? i : state.index, i >= 0)
+    if (state.order.length) return openFileAt(i >= 0 ? i : Math.max(state.index, 0), i >= 0)
+    state.fileLoadId++
+    setLoading(false)
+    showMessage('No changed files')
 }
 
 function unshelveSelected({entry, files}) {

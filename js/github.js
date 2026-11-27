@@ -368,19 +368,22 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
     // GitHub could not be reached, or stopped answering: the imported packs answer what they hold (never what must be
     // current)
     const fallback = () => live || signal?.aborted ? null : fromPack(url, method)
-    let res
-    try {
-        res = await send()
-    } catch (e) {
-        if (!(e instanceof TypeError) && !e.stalled) throw e
-        res = await fallback()
-        if (!res) throw e.stalled ? e : new GitHubError('GitHub could not be reached: check the network connection', 0, {network: true, detail: e.message})
+    const reach = async () => {
+        try {
+            return await send()
+        } catch (e) {
+            if (!(e instanceof TypeError) && !e.stalled) throw e
+            const res = await fallback()
+            if (!res) throw e.stalled ? e : new GitHubError('GitHub could not be reached: check the network connection', 0, {network: true, detail: e.message})
+            return res
+        }
     }
+    let res = await reach()
     if (res.status === 401 && signedIn() && !res.headers.get('x-jd-pack')) {
         token = await renewToken()
         if (token) headers.Authorization = `Bearer ${token}`
         else delete headers.Authorization
-        res = await send()
+        res = await reach()
     }
     // the service worker could not keep it (sw.js)
     if (res.headers.get('x-jd-unsaved')) storageFull()
