@@ -87,15 +87,29 @@ const currentToken = () => tokenExpires() && tokenExpires() - Date.now() < 60000
 
 export class GitHubError extends Error {
     /**
-     * `retryAt`: when GitHub's rate limit allows the request again (ms since the epoch), if it said. `stalled`: no answer
-     * came in time (STALL_MS).
+     * `message` in plain words; `detail`: what GitHub (or the browser) said, as it said it. `retryAt`: when GitHub's rate
+     * limit allows the request again (ms since the epoch), if it said. `stalled`: no answer came in time (STALL_MS);
+     * `network`: GitHub could not be reached.
      */
-    constructor(message, status, {retryAt = 0, stalled = false} = {}) {
+    constructor(message, status, {detail = '', retryAt = 0, stalled = false, network = false} = {}) {
         super(message)
         this.status = status
+        this.detail = detail
         this.retryAt = retryAt
         this.stalled = stalled
+        this.network = network
     }
+}
+
+/** What an answer with an error status means, in plain words (`token`: one was sent). */
+function errorMessage(status, token) {
+    if (status === 401) return 'GitHub refused the token: check or replace it'
+    if (status === 403) return `GitHub refused access${token ? ': the token may not have access to this repository' : ': sign in or add a GitHub token'}`
+    if (status === 404) return `GitHub has no such pull request, commit or file, or it is in a private repository${token ? ' the token has no access to' : ': sign in or add a GitHub token'}`
+    if (status === 409 || status === 422) return 'GitHub could not do this'
+    if (status === 451) return 'GitHub does not show this, for legal reasons'
+    if (status >= 500) return 'GitHub had a problem: try again in a moment'
+    return `GitHub answered with an error (${status})`
 }
 
 /** A request that gets no answer, or no more of its body, for this long has stalled: it is given up. */
@@ -318,7 +332,7 @@ function snapKey(url, method = 'GET') {
 let snapIndex
 function loadSnapIndex() {
     snapIndex ??= snapFetch('index.json').then((r) => {
-        if (!r.ok) throw new GitHubError(`Snapshot "${SNAP}" not found`, r.status)
+        if (!r.ok) throw new GitHubError(`No snapshot at ${SNAP}`, r.status, {detail: `HTTP ${r.status}`})
         snapDate = r.headers.get('last-modified')
         return r.json()
     })
@@ -342,7 +356,7 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
     const url = path.startsWith('http') ? path : API + path
     if (SNAP) {
         const res = await snapRequest(url, method)
-        if (!res.ok) throw new GitHubError(`HTTP ${res.status}`, res.status)
+        if (!res.ok) throw new GitHubError(errorMessage(res.status, false), res.status, {detail: `The snapshot recorded HTTP ${res.status}`})
         return res
     }
     const headers = {Accept: accept}
@@ -360,7 +374,7 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
     } catch (e) {
         if (!(e instanceof TypeError) && !e.stalled) throw e
         res = await fallback()
-        if (!res) throw e
+        if (!res) throw e.stalled ? e : new GitHubError('GitHub could not be reached: check the network connection', 0, {network: true, detail: e.message})
     }
     if (res.status === 401 && signedIn() && !res.headers.get('x-jd-pack')) {
         token = await renewToken()
@@ -372,26 +386,26 @@ async function request(path, {accept = 'application/vnd.github+json', method = '
     if (res.headers.get('x-jd-unsaved')) storageFull()
     if (res.headers.get('x-jd-offline')) {
         window.dispatchEvent(new CustomEvent('jd-offline'))
-        if (live) throw new GitHubError('No network: GitHub could not be reached', 503)
+        if (live) throw new GitHubError('No network: GitHub could not be reached', 503, {network: true})
         // the service worker had no saved copy
         if (res.status === 503) res = await fallback() || res
     }
     if (!res.ok) {
-        let message = res.statusText || `HTTP ${res.status}`
-        try { message = (await res.json()).message || message } catch { /* not json */ }
-        if (res.status === 404 && !token) message += '. If the repository is private, add a GitHub token.'
+        let said = res.statusText
+        try { said = (await res.json()).message || said } catch { /* not json */ }
+        const detail = said ? `GitHub said: “${said}” (${res.status})` : `HTTP ${res.status}`
+        let message = errorMessage(res.status, !!token)
         // the primary limit gives its reset, a secondary one (searches made too fast) a wait
         let retryAt = 0
         const limited = (res.status === 403 || res.status === 429) && (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.get('retry-after'))
         if (limited) {
-            message = 'GitHub API rate limit reached' + (token ? '' : '. Add a GitHub token for a higher limit.')
+            message = 'GitHub API rate limit reached' + (token ? '' : ': add a GitHub token for a higher limit')
             retryAt = res.headers.get('retry-after') ? Date.now() + 1000 * +res.headers.get('retry-after') : 1000 * +res.headers.get('x-ratelimit-reset')
             if (!token && res.headers.get('x-ratelimit-remaining') === '0') window.dispatchEvent(new CustomEvent(RATE_LIMITED, {detail: {resetAt: retryAt}}))
         }
-        if (res.status === 401) message = 'GitHub refused the token (401). Check or replace it.'
-        const app = signedIn() && (res.status === 403 || res.status === 404) && (await authConfig())?.appSlug
-        if (app) message += ` If jetdiff is not installed on this repository, install it: https://github.com/apps/${app}/installations/new`
-        throw new GitHubError(message, res.status, {retryAt})
+        const app = !limited && signedIn() && (res.status === 403 || res.status === 404) && (await authConfig())?.appSlug
+        if (app) message += `. If jetdiff is not installed on this repository, install it: https://github.com/apps/${app}/installations/new`
+        throw new GitHubError(message, res.status, {detail, retryAt})
     }
     return res
 }
@@ -451,23 +465,55 @@ function compareTarget(owner, repo, base, dots, head) {
 
 export const compareDots = (t) => t.dots === '..' ? '..' : '...'
 
+// what the page's parameters take: GitHub's owner and repository names (an owner of an enterprise has a `_` in its name),
+// a pull request's number, a commit's sha (7 to 40 hex digits), or a range of them
+const OWNER = /^[A-Za-z0-9][\w-]*$/
+const REPO = /^(?!\.\.?$)[\w.-]+$/
+const NUMBER = /^[1-9]\d{0,9}$/
+const SHA = /^[0-9a-f]{7,40}$/i
+const COMMITS = /^[0-9a-f]{7,40}(?:\.{2,3}[0-9a-f]{7,40})?$/i
+const COMPARE = /^([^/]+)\/([^/]+)\/(\S+?)(\.{2,3})(\S+)$/
+
+/** `owner/repo/rest`, a trailing slash aside: [owner, repo, rest], or null when the names are not GitHub's. */
+function repoPath(v) {
+    const [owner, repo, ...rest] = v.replace(/\/$/, '').split('/')
+    return OWNER.test(owner) && REPO.test(repo || '') ? [owner, repo, rest.join('/')] : null
+}
+
+/** The target the page's parameters name (`pr`, `commit`, `compare`), or null; targetParamsError says why not. */
 export function paramsToTarget(params) {
     const pr = params.get('pr')
     if (pr) {
-        const [owner, repo, number] = pr.split('/')
-        if (owner && repo && +number) return {type: 'pr', owner, repo, number: +number, commit: params.get('commit') || undefined}
+        const [owner, repo, number] = repoPath(pr) || []
+        const commit = params.get('commit')
+        if (NUMBER.test(number || '') && (!commit || COMMITS.test(commit))) return {type: 'pr', owner, repo, number: +number, commit: commit || undefined}
+        return null
     }
     const commit = params.get('commit')
-    if (commit && commit.includes('/')) {
-        const [owner, repo, sha] = commit.split('/')
-        if (owner && repo && sha) return {type: 'commit', owner, repo, sha}
+    if (commit) {
+        const [owner, repo, sha] = repoPath(commit) || []
+        return SHA.test(sha || '') ? {type: 'commit', owner, repo, sha} : null
     }
     const compare = params.get('compare')
     if (compare) {
-        const m = compare.match(/^([^/]+)\/([^/]+)\/(.+?)(\.{2,3})(.+)$/)
-        if (m) return compareTarget(m[1], m[2], m[3], m[4], m[5])
+        const m = compare.match(COMPARE)
+        return m && OWNER.test(m[1]) && REPO.test(m[2]) ? compareTarget(m[1], m[2], m[3], m[4], m[5]) : null
     }
     return null
+}
+
+/** Why the page's parameters open nothing, when they name a pull request, a commit or a compare that is not one; else ''. */
+export function targetParamsError(params) {
+    if (paramsToTarget(params)) return ''
+    const pr = params.get('pr'), commit = params.get('commit'), compare = params.get('compare')
+    if (pr) {
+        const [, , number] = repoPath(pr) || []
+        return NUMBER.test(number || '') ? `commit=${commit} is not a commit of the pull request: it takes a commit's sha, or a range of them (sha1..sha2)`
+            : `?pr=${pr} is not a pull request: it takes owner/repo/number, as in ?pr=owner/repo/123`
+    }
+    if (commit) return `?commit=${commit} is not a commit: it takes owner/repo/sha, the sha 7 to 40 hex digits`
+    if (compare) return `?compare=${compare} is not a compare: it takes owner/repo/base...head (or base..head to compare the two tips)`
+    return ''
 }
 
 function mapFiles(files) {
@@ -757,8 +803,8 @@ export async function accountIdentity() {
 async function graphql(query, variables, {signal} = {}) {
     const res = await request(`${API}/graphql`, {method: 'POST', body: {query, variables}, signal})
     const data = await res.json()
-    if (data.errors?.length) throw new GitHubError(data.errors.map((e) => e.message).join('; '), 200)
-    if (!data.data) throw new GitHubError(data.message || 'GraphQL request failed', 200)
+    if (data.errors?.length) throw new GitHubError('GitHub could not do this', 200, {detail: `GitHub said: “${data.errors.map((e) => e.message).join('; ')}”`})
+    if (!data.data) throw new GitHubError('GitHub gave no answer to this request', 200, {detail: data.message ? `GitHub said: “${data.message}”` : ''})
     return data.data
 }
 
@@ -806,7 +852,7 @@ async function updateRef(owner, repo, branch, sha, force) {
         await json(`/repos/${owner}/${repo}/git/refs/${refPath(branch)}`, {method: 'PATCH', body: {sha, force}})
     } catch (e) {
         // the update can land with its answer lost: then the branch is at `sha`
-        if (!(e instanceof TypeError) && !(e.status >= 502)) throw e
+        if (!e.network && !e.stalled && !(e.status >= 502)) throw e
         if (await branchHead(owner, repo, branch).catch(() => null) !== sha) throw e
     }
 }

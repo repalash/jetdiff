@@ -71,7 +71,9 @@ base branch's tip); it stays until closed. The Log says so of a commit's or a ra
 shows only part of the conversation (its first 500 comments) or could not read its inline comments or reactions.
 
 A request that GitHub does not answer for 30 seconds is given up: the changes, a file or the Timeline that waited on
-it says so, with Retry.
+it says so, with Retry. Errors say in plain words what went wrong, with what GitHub said under them; a link that opens
+nothing (a malformed `?pr=`, `?commit=` or `?compare=`, or a path that is no GitHub link) says why on the start page,
+and a `file=` that is not among the changes says so over the first file.
 
 ### Keys
 

@@ -272,3 +272,61 @@ test('a file\'s load stops when another file opens, but a load the new one share
     await ready(page)
     await expect(page.locator('.sbs-right .view-lines')).toContainText('new c')
 })
+
+test.describe('errors in plain words, GitHub\'s own kept as the detail', () => {
+    const R = '/repos/repalash/threepipe'
+
+    test('a pull request GitHub does not have', async ({page}) => {
+        await page.goto('./?pr=repalash/threepipe/99999')
+        await expect(page.locator('#land-error')).toContainText('Could not open repalash/threepipe#99999')
+        await expect(page.locator('#land-error')).toContainText('GitHub has no such pull request, commit or file, or it is in a private repository')
+        await expect(page.locator('#land-error .err-detail')).toHaveText('GitHub said: “Not in the fixture” (404)')
+    })
+
+    test('a file GitHub failed to give, and a network that fails', async ({page}) => {
+        page.github.handle(({path}) => path.includes('/contents/a.ts?') && {status: 502, body: {message: 'Server Error'}})
+        const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}, {filename: 'b.ts', old: 'old b\n', new: 'new b\n'}])
+        await page.route((u) => u.pathname.endsWith('/contents/b.ts'), (route) => route.abort('internetdisconnected'))
+        await page.goto(`${pr.url}&file=a.ts`)
+        await expect(page.locator('#view-msg')).toContainText('GitHub had a problem: try again in a moment')
+        await expect(page.locator('#view-msg .err-detail')).toHaveText('GitHub said: “Server Error” (502)')
+        await page.locator('#tree .tr-file[data-file="b.ts"]').click()
+        await expect(page.locator('#view-msg')).toContainText('GitHub could not be reached: check the network connection')
+        // the browser's own words are the detail
+        await expect(page.locator('#view-msg .err-detail')).toHaveText('Failed to fetch')
+    })
+})
+
+test.describe('a link that opens nothing says why', () => {
+    for (const [query, says] of [
+        ['?pr=repalash/threepipe', '?pr=repalash/threepipe is not a pull request: it takes owner/repo/number'],
+        ['?pr=repalash/threepipe/1e3', '?pr=repalash/threepipe/1e3 is not a pull request'],
+        ['?pr=../../threepipe/1', '?pr=../../threepipe/1 is not a pull request'],
+        ['?pr=repalash/threepipe/193&commit=nope', 'commit=nope is not a commit of the pull request'],
+        ['?commit=repalash/threepipe/xyz', '?commit=repalash/threepipe/xyz is not a commit'],
+        ['?compare=repalash/threepipe/main', '?compare=repalash/threepipe/main is not a compare'],
+    ]) {
+        test(query, async ({page}) => {
+            const asked = githubRequests(page)
+            await page.goto('./' + query)
+            await expect(page.locator('#land-error')).toContainText(says)
+            await expect(page.locator('#land-error .retry')).toHaveCount(0)
+            expect(asked).toEqual([])
+        })
+    }
+
+    test('a broken GitHub-style path', async ({page}) => {
+        await page.goto('./repalash/threepipe/pull/abc')
+        await expect(page.locator('#land-error')).toContainText('/repalash/threepipe/pull/abc is not a pull request, commit or compare')
+        // said once: the URL is the start page's again
+        expect(new URL(page.url()).search).toBe('')
+    })
+
+    test('a file the changes do not have', async ({page}) => {
+        const pr = fakePr(page.github, ++number, [{filename: 'a.ts', old: 'old a\n', new: 'new a\n'}])
+        await page.goto(`${pr.url}&file=nope.ts`)
+        await ready(page)
+        await expect(page.locator('#notes')).toContainText('nope.ts is not among the changed files: the first one shows instead')
+        await expect(page.locator('#tree .tr-file.sel')).toHaveAttribute('data-file', 'a.ts')
+    })
+})

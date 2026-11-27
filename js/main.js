@@ -1,7 +1,7 @@
 import {
     accountIdentity, answerSnapshot, authConfig, commitFiles, compareDots, getFileContent, getGitCommit, getPullHead, getTimeline, getViewer, moveBranch, getToken, signedIn, signIn, signOut, takeSignInToken, getViewedStates, GitHubError, loadChangeSet,
     httpsUrl, otherSite, PACK_ANSWER, paramsToTarget, RATE_LIMITED, parseTarget, listPullRequests, searchCode, searchMyPullRequests, setFileViewed, setSnapshot, setToken, snapshotInfo, snapshotName, snapshotRepos,
-    snapshotToAsk, targetToParams, TIMELINE_MAX,
+    snapshotToAsk, targetParamsError, targetToParams, TIMELINE_MAX,
 } from './github.js'
 import {
     applyTheme, applyThemeCss, DEFAULT_THEME, ensureLanguage, fullWidthSelection, HOVER, languageForPath, languageName, loadMonaco,
@@ -188,8 +188,15 @@ function showError(el, message) {
     el.hidden = false
 }
 
-/** What a load that failed shows where the view waits on it: `title` (HTML), the error, and Retry (with `retry`). */
-const failureHtml = (title, e, retry = true) => `${title}<div class="dim small">${esc(e.message)}</div>
+/** An error in one line: its message in plain words, and what GitHub said (GitHubError's detail). */
+const errorText = (e) => e.detail ? `${e.message} (${e.detail})` : e.message
+
+/**
+ * What a load that failed shows where the view waits on it: `title` (HTML), the error ({message, detail?}) and Retry
+ * (with `retry`).
+ */
+const failureHtml = (title, e, retry = true) => `${title}<div class="small">${esc(e.message)}</div>
+    ${e.detail ? `<div class="dim small err-detail">${esc(e.detail)}</div>` : ''}
     ${retry ? `<button type="button" class="btn btn-small retry">${icons.refresh} Retry</button>` : ''}`
 
 /** Makes the Retry button in `el` run `fn`. */
@@ -440,7 +447,7 @@ function showLanding(error = null, retry = null) {
                 landItem(prHref(p, p.number), `${esc(prKey(p))}${p.draft ? ' <i>draft</i>' : ''}`, p.title)).join('')
                 : '<div class="dim small">None</div>'}</div>`
         }).catch((e) => {
-            mine.innerHTML = !navigator.onLine || e.status === 503 ? '' : `<div class="dim small">Could not list your pull requests: ${esc(e.message)}</div>`
+            mine.innerHTML = !navigator.onLine || e.status === 503 ? '' : `<div class="dim small">Could not list your pull requests: ${esc(errorText(e))}</div>`
         })
     }
 }
@@ -550,7 +557,12 @@ async function route(force = false) {
         state.key = null
         state.packAnswered = false
         renderRecordedBar()
-        return showLanding()
+        // a GitHub-style path that is no GitHub link comes from 404.html (redirect.js): said once
+        const path = params.get('path')
+        if (path) dropParam('path')
+        const why = path ? `${location.host}${path} is not a pull request, commit or compare: a GitHub link with github.com replaced by ${location.host} opens one, as in ${location.host}/owner/repo/pull/123`
+            : targetParamsError(params)
+        return showLanding(why ? {title: 'This link opens nothing', message: why} : null)
     }
     const file = params.get('file')
     const key = targetToParams(target).toString()
@@ -603,7 +615,7 @@ async function openTarget(target, file) {
         if (id !== state.loadId) return
         setLoading(false)
         console.error(e)
-        return showLanding({title: `Could not open ${labelForTarget(target)}`, message: e.message || String(e)}, reloadTarget)
+        return showLanding({title: `Could not open ${labelForTarget(target)}`, message: e.message || String(e), detail: e.detail}, reloadTarget)
     }
     if (id !== state.loadId) return
     // the change set is shown with its edits only: until then, a commit would put edits made on the previous head
@@ -640,6 +652,7 @@ async function openTarget(target, file) {
         return showMessage('No changed files')
     }
     const start = file ? state.order.findIndex((f) => f.path === file) : 0
+    if (start < 0) addNote(`${file} is not among the changed files: the first one shows instead.`)
     await openFileAt(start >= 0 ? start : 0, false)
 }
 
@@ -972,7 +985,7 @@ async function loadPrList() {
                 <div class="prl-meta">#${esc(p.number)} · created ${esc(dayOf(p.created))}, by ${esc(p.user || '')}${p.state !== 'open' ? ` · ${esc(p.state)}` : ''}</div>
             </a>`).join('') || '<div class="tree-msg dim">No pull requests</div>'
     } catch (e) {
-        if (id === state.prlLoad) list.innerHTML = `<div class="tree-msg dim">${esc(e.message)}</div>`
+        if (id === state.prlLoad) list.innerHTML = `<div class="tree-msg dim">${esc(errorText(e))}</div>`
     }
 }
 
@@ -1355,12 +1368,12 @@ async function toggleViewed(file, viewed) {
             const queued = store.get(pendingKey(), {})[file.path]
             if (queued !== undefined && !!queued !== viewed) dropPending(pendingKey(), file.path, queued)
         } catch (e) {
-            if (e instanceof TypeError || e?.status === 503 || !navigator.onLine) {
+            if (e.network || !navigator.onLine) {
                 pend()
                 storeViewed(state.cs.files)
                 return
             }
-            toast(`GitHub did not save Viewed: ${e.message}`, 'error')
+            toast(`GitHub did not save Viewed: ${errorText(e)}`, 'error')
             viewed ? state.viewed.delete(file.path) : state.viewed.add(file.path)
             renderViewed()
         }
@@ -2099,7 +2112,7 @@ async function offlineDialog({all = null} = {}) {
             if (full) toast(`${FULL_NOTE} ${prs} pull requests were saved.`, 'error', 15000)
             else toast(ctl.signal.aborted ? 'Download stopped' : `${prs} pull requests saved for offline${failedNote(failed)}`, failed ? 'error' : 'info', 8000)
         } catch (e) {
-            toast(`Download failed: ${e.message}`, 'error', 8000)
+            toast(`Download failed: ${errorText(e)}`, 'error', 8000)
         }
         if (dlg.open) render()
         if (!$('#landing').hidden) showLanding()
@@ -2116,7 +2129,7 @@ async function offlineDialog({all = null} = {}) {
             if (r.full) toast(`${FULL_NOTE} ${owner}/${repo}: ${plural(r.prs, 'pull request')} saved.`, 'error', 15000)
             else toast(r.aborted ? 'Download stopped' : `${owner}/${repo}: ${plural(r.prs, 'pull request')} saved for offline${failedNote(r.failed)}`, r.failed ? 'error' : 'info', 6000)
         } catch (e) {
-            toast(`Download failed: ${e.message}`, 'error', 8000)
+            toast(`Download failed: ${errorText(e)}`, 'error', 8000)
         }
         if (dlg.open) render()
     }
@@ -2501,7 +2514,7 @@ async function loadHeadMessage() {
         // a snapshot has no such response: its list of commits is complete and current
         const last = state.cs.commits?.at(-1)
         if (last?.sha === sha) state.headMessage = {sha, text: last.commit.message}
-        else if (sha === state.editHead) showError($('#cmt-err'), `Could not read the last commit: ${e.message}`)
+        else if (sha === state.editHead) showError($('#cmt-err'), `Could not read the last commit: ${errorText(e)}`)
     }
 }
 
@@ -2667,8 +2680,8 @@ async function doCommit() {
         })
         if (await waitForHead(sha, ++state.commitGen)) reloadTarget()
     } catch (err) {
-        let m = err.message
-        if (err.status === 503 || err instanceof TypeError || !navigator.onLine) m = state.editsUnsaved
+        let m = errorText(err)
+        if (err.network || !navigator.onLine) m = state.editsUnsaved
             ? 'No network, and this device could not save your edits: keep this tab open, and Commit and Push once you are online again.'
             : 'No network: your edits are kept on this device. Commit and Push once you are online again.'
         else if (err.status === 403 || err.status === 404) m += `. The token needs Contents: write on ${pr.head.repo.full_name}.`
@@ -2696,7 +2709,7 @@ async function undoCommit(where, previous, sha, key, committed) {
     try {
         await moveBranch({...where, sha: previous, expected: sha})
     } catch (e) {
-        toast(`Undo failed: ${e.message}`, 'error', 8000)
+        toast(`Undo failed: ${errorText(e)}`, 'error', 8000)
         if (await waitForHead(sha, gen)) reloadTarget()
         return
     }
@@ -2935,7 +2948,7 @@ async function goToDeclaration(ed = focusedEditor(), position = ed?.getPosition(
         if (id !== state.declId) return
         if (e instanceof NoAccess) return toast(e.message, 'error', 8000, {label: 'Sign In…', run: tokenDialog})
         if (e.retryAt) return toast(`GitHub's code search allows 10 searches a minute: try again in ${Math.max(1, Math.ceil((e.retryAt - Date.now()) / 1000))} s`, 'error', 8000)
-        return toast(`Could not search ${repoName(state.target)} for ${w.word}: ${e.message}`, 'error', 8000)
+        return toast(`Could not search ${repoName(state.target)} for ${w.word}: ${errorText(e)}`, 'error', 8000)
     }
     if (id !== state.declId || !ed.getModel()) return
     if (!found.length) return toast(`Cannot find the declaration of ${w.word}`, 'info', 3000)
