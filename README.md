@@ -25,7 +25,8 @@ gets a message saying so.
 - **Commits**: a log with a graph line; select a commit or a range to see only its changes.
 - **Timeline**: the description, comments and reviews with their inline threads, rendered as Markdown, with the
   reactions to the description and the comments (counts only: GitHub's summary does not say who reacted).
-- **Markdown preview** for `.md` files, with the changed words highlighted and the two versions kept side by side.
+- **Markdown preview** for `.md` files, with the changed words highlighted and the two versions kept side by side (a file
+  over 3000 lines opens as code, as its preview takes seconds on a phone: Preview shows it).
 - **Quick edits**: edit the PR's files in place and commit them to its branch, with Amend and Undo.
 - **Search Everywhere** (double Shift) for files, actions, settings, commits and pull requests.
 - **Go to Declaration** (⌘/Ctrl-click, ⌘B/Ctrl+B) in every language, and TypeScript's own declarations and hovers

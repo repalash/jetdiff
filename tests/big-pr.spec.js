@@ -381,4 +381,33 @@ test.describe('a huge file', () => {
         await expect(deleted).toBeVisible()
         expect(await deleted.evaluate((l) => new Set([...l.querySelectorAll('span[class^="mtk"]')].map((s) => s.className)).size)).toBeGreaterThan(3)
     })
+
+    // Markdown as a long changelog has it, changed every 50 lines
+    const markdown = (n, v) => Array.from({length: n}, (_, i) => [`## Section ${i}`, '',
+        `Some text about item ${i} with a [link](https://example.com/) and \`code ${i}\`${i % 50 === 2 ? v : ''}.`, '', `- a point ${i}`][i % 5]).join('\n') + '\n'
+
+    test('of 19,000 lines of Markdown opens as code on a phone, without freezing it, and Preview shows it @phone', async ({page}) => {
+        test.setTimeout(120000)
+        const pr = fakePr(page.github, ++number, [{filename: 'CHANGELOG.md', old: markdown(19000, 'a'), new: markdown(19000, 'b')}, {filename: 'small.ts', old: 'a\n', new: 'b\n'}])
+        await page.goto(`${pr.url}&file=small.ts`)
+        await ready(page)
+        // a phone's CPU, about
+        const cdp = await page.context().newCDPSession(page)
+        await cdp.send('Emulation.setCPUThrottlingRate', {rate: 4})
+        const longest = await longestTask(page, async () => {
+            await page.locator('#btn-drawer').click()
+            await page.locator('#tree .tr-file[data-file="CHANGELOG.md"]').click()
+            await expect(page.locator('#loading-bar')).not.toHaveClass(/\bon\b/, {timeout: 60000})
+        })
+        await cdp.send('Emulation.setCPUThrottlingRate', {rate: 1})
+        expect(longest).toBeLessThan(2000)
+        await expect(page.locator('.mdp')).toHaveCount(0)
+        await expect(page.locator('#uni-right .md-long')).toHaveText('too long to preview')
+        await expect(page.locator('#btn-md-code')).toHaveClass(/\bon\b/)
+        await page.locator('#btn-md-preview').click()
+        await expect(page.locator('.mdp-new .md-mod').first()).toBeVisible({timeout: 60000})
+        // and Code the code again
+        await page.locator('#btn-md-code').click()
+        await expect(page.locator('.mdp')).toBeHidden()
+    })
 })

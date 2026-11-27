@@ -485,6 +485,8 @@ const state = {
     forward: [],
     outside: null, // the file shown outside the changes (Go to Declaration): its location, with its language
     notes: [], // what the change set shown leaves out or could not read (changeSetNotices)
+    mdHeld: false, // the open file is Markdown too long to preview, shown as code
+    mdShown: new Set(), // the long Markdown files Preview was asked to show anyway
 }
 
 const currentFile = () => state.order[state.index]
@@ -588,6 +590,7 @@ async function openTarget(target, file) {
     state.target = target
     state.ready = false
     state.notes = []
+    state.mdShown = new Set()
     state.offlineCopy = false
     state.packAnswered = false
     renderOffline()
@@ -897,6 +900,7 @@ function buildShell() {
         if (p) { setTab('changes'); selectFile(p.dataset.path) }
     }
     $('#btn-md-preview').onclick = () => {
+        if (state.mdHeld) { state.mdShown.add(currentFile().path); return reopenFile(true) }
         if (state.mdFailed) { state.mdFailed = false; if (settings.mdPreview) return reopenFile(true) }
         if (!settings.mdPreview) toggleMdPreview()
     }
@@ -1558,7 +1562,10 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
         registerHover(monaco, lang)
     }
     if (state.editableFile) modified.onDidChangeContent(() => onEdited(f, original, modified, id))
-    const preview = mdPreviewOn(f)
+    // a long Markdown file opens as code: Preview shows it (and keeps it shown until the next change set)
+    state.mdHeld = mdPreviewOn(f) && !state.mdShown.has(f.path) && Math.max(original.getLineCount(), modified.getLineCount()) > MD_PREVIEW_LINES
+    if (state.mdHeld) labels.right += `<span class="tag tag-note md-long" title="Its preview takes long to show: Preview shows it">too long to preview</span>`
+    const preview = mdPreviewOn(f) && !state.mdHeld
     // the unified view draws the deleted lines once, with the original's tokens as they are then (Monaco 0.52 means to
     // draw them again once it has tokenized the original, but misses it: issues/open/unified-deleted-lines-colors.md),
     // so a small original with deletions is tokenized up front. Monaco tokenizes the rest as it is shown: a big file's
@@ -2749,6 +2756,10 @@ function prefetch(i, signal) {
 
 // the most lines of an original tokenized before the unified view shows it (about a second on a slow phone)
 const TOKENIZE_UP_FRONT = 1000
+
+// a Markdown file longer than this opens as code: its preview (rendered, sanitized and laid out whole) takes seconds on
+// a phone, and 19,000 lines froze one for 8 s
+const MD_PREVIEW_LINES = 3000
 
 // Monaco's time for one diff: past it, it gives a coarser diff
 const DIFF_TIME = 20000
