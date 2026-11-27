@@ -248,10 +248,11 @@ function tokenDialog() {
     }
 }
 
-/** The stored edits not committed yet, of every pull request: carried, waiting for their head, and kept aside. */
+/** The stored edits not committed yet, of every pull request: carried, waiting for their head, and shelved. */
 function storedEditCount() {
     flushEdits()
-    return Object.values(editStore()).reduce((n, e) => n + Object.keys(e?.files || {}).length + (e?.pending?.length || 0) + (e?.conflicts?.length || 0), 0)
+    return Object.values(editStore()).reduce((n, e) => n + Object.keys(e?.files || {}).length + (e?.pending?.length || 0)
+        + (e?.shelf || []).reduce((m, s) => m + s.files.length, 0), 0)
 }
 
 // what GitHub data and its traces this device keeps (not the settings, nor the edits)
@@ -288,7 +289,7 @@ function signOutDialog(viaApp) {
             <label class="cmt-amend"><input type="checkbox" id="so-data" checked><span>Also remove data saved on this device</span></label>
             <p class="dim small">The pull requests saved for offline use and opened before, recent pull requests, Viewed marks and
             commit options. Settings such as the theme stay.</p>
-            ${edits ? `<label class="cmt-amend"><input type="checkbox" id="so-edits"><span>Also remove my unpushed edits (${plural(edits, 'file')})</span></label>` : ''}
+            ${edits ? `<label class="cmt-amend"><input type="checkbox" id="so-edits"><span>Also remove my unpushed edits, the shelved ones too (${plural(edits, 'file')})</span></label>` : ''}
             <div class="dlg-actions">
                 <span class="spacer"></span>
                 <button type="button" id="so-cancel" class="btn btn-ghost">Cancel</button>
@@ -478,6 +479,11 @@ const state = {
     commitGen: 0, // a commit or an undo: a newer one cancels the reload an older one waits for
     headMessage: null, // {sha, text}: the head commit's message, for Amend
     cmtExcluded: new Set(), // edited files unchecked in the Commit panel
+    commitTab: 'commit', // the Commit tool window's tab shown last: 'commit' or 'shelf'
+    shelfSel: null, // the Shelf's selection: {id, path} (path null for a whole entry)
+    shelfCollapsed: new Set(), // the ids of the Shelf's entries collapsed
+    shelfShown: null, // the shelved file shown against its current version: {id, path}
+    shelfModels: null, // its two models, disposed when the next file shows
     editing: false, // edit mode: the right side (the PR head) is editable
     editableFile: false,
     pristine: null, // the open file's text at the head
@@ -596,6 +602,9 @@ async function openTarget(target, file) {
     renderOffline()
     renderRecordedBar()
     renderCommitPanel(false)
+    // a file whose check could not read GitHub is checked again
+    for (const [k, v] of shelfChecks) if (v === 'error') shelfChecks.delete(k)
+    renderShelf()
     $('#landing').hidden = true
     $('#app').hidden = false
     buildShell()
@@ -718,13 +727,17 @@ function buildShell() {
         </header>
         <div class="main">
             <nav class="strip hide-mobile">
-                <button class="strip-btn" id="strip-commit" title="Commit (edits made here)">${icons.commit}<i class="strip-badge" id="strip-badge" hidden></i></button>
+                <button class="strip-btn" id="strip-commit" title="Commit and Shelf (edits made here)">${icons.commit}<i class="strip-badge" id="strip-badge" hidden></i></button>
                 <button class="strip-btn active" id="strip-changes" title="Changes">${icons.changes}</button>
                 <button class="strip-btn" id="strip-prs" title="Pull requests of the repository">${icons.pr}</button>
             </nav>
             <aside class="side" id="side">
                 <div class="side-head">
                     <button class="side-title" id="side-title" title="Choose a commit"><span id="side-title-text">Changes</span>${icons.chevronDown}</button>
+                    <div class="side-tabs" id="side-tabs" hidden>
+                        <button class="side-tab" id="stab-commit">Commit</button>
+                        <button class="side-tab" id="stab-shelf" title="Edits put aside: shelved here, or kept when the file changed on GitHub">Shelf<span class="side-tab-n" id="stab-shelf-n"></span></button>
+                    </div>
                     <button class="tb-btn only-mobile" id="btn-drawer-close" title="Close">${icons.close}</button>
                 </div>
                 <div class="pr-head" id="pr-head" hidden>
@@ -758,7 +771,7 @@ function buildShell() {
                     </div>
                     <div class="tree" id="cmt-tree"></div>
                     <div class="cmt-bottom">
-                        <button class="cmt-aside" id="cmt-aside" title="Edits of files that changed on GitHub since: not applied" hidden></button>
+                        <button class="cmt-shelf" id="cmt-shelf" title="Show the Shelf" hidden></button>
                         <div class="cmt-opts">
                             <label class="cmt-amend" title="Replace the last commit of the branch (a force push)"><input type="checkbox" id="cmt-amend"><span>Amend last commit</span></label>
                             <span class="spacer"></span><span class="cmt-count" id="cmt-count"></span>
@@ -772,6 +785,15 @@ function buildShell() {
                             <button class="tb-btn cmt-gear" id="cmt-options" title="Commit Options: author and committer">${icons.gear}</button>
                         </div>
                     </div>
+                </div>
+                <div class="shelf" id="shelf" hidden>
+                    <div class="side-tools">
+                        <button class="tb-btn" id="sh-unshelve">${icons.unshelve}</button>
+                        <button class="tb-btn" id="sh-copy">${icons.copy}</button>
+                        <button class="tb-btn" id="sh-download">${icons.download}</button>
+                        <button class="tb-btn" id="sh-delete">${icons.trash}</button>
+                    </div>
+                    <div class="tree" id="shelf-list"></div>
                 </div>
             </aside>
             <div class="splitter hide-mobile" id="splitter"></div>
@@ -841,7 +863,14 @@ function buildShell() {
     }
     $('#pr-clear').onclick = () => navigateHere({...state.target, commit: undefined})
     $('#strip-prs').onclick = () => setSidePanel(state.sidePanel === 'prs' ? 'changes' : 'prs')
-    $('#strip-commit').onclick = () => setSidePanel(state.sidePanel === 'commit' ? 'changes' : 'commit')
+    $('#strip-commit').onclick = () => setSidePanel(commitWindow() ? 'changes' : state.commitTab)
+    $('#stab-commit').onclick = () => setSidePanel('commit')
+    $('#stab-shelf').onclick = () => setSidePanel('shelf')
+    $('#shelf-list').onclick = (e) => onShelfClick(e)
+    $('#sh-unshelve').onclick = (e) => shelfAction(e.currentTarget, unshelveSelected)
+    $('#sh-copy').onclick = (e) => shelfAction(e.currentTarget, copySelected)
+    $('#sh-download').onclick = (e) => shelfAction(e.currentTarget, downloadSelected)
+    $('#sh-delete').onclick = (e) => shelfAction(e.currentTarget, deleteSelected)
     state.cmtTree = new FileTree($('#cmt-tree'), {
         checks: true,
         rootLabel: 'Changes',
@@ -856,7 +885,7 @@ function buildShell() {
     $('#cmt-msg').onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); doCommit() } }
     $('#cmt-go').onclick = () => doCommit()
     $('#cmt-options').onclick = () => commitOptionsDialog()
-    $('#cmt-aside').onclick = () => state.target?.type === 'pr' && conflictsDialog(prKey(state.target))
+    $('#cmt-shelf').onclick = () => setSidePanel('shelf')
     $('#cmt-who').onclick = () => commitOptionsDialog()
     $('#prl-state').onclick = (e) => openMenu(e.currentTarget, ['open', 'closed', 'merged', 'all'].map((v) => ({
         label: cap(v), checked: state.prlState === v, action: () => { state.prlState = v; loadPrList() },
@@ -947,27 +976,37 @@ function setupSplitter() {
     })
 }
 
+/** The Commit tool window shows (its Commit or Shelf tab), as in the IDE. */
+const commitWindow = () => state.sidePanel === 'commit' || state.sidePanel === 'shelf'
+
 function setSidePanel(which) {
     state.sidePanel = which
-    const prs = which === 'prs', cmt = which === 'commit', other = prs || cmt
+    const prs = which === 'prs', cmt = which === 'commit', shelf = which === 'shelf', other = prs || cmt || shelf
+    if (cmt || shelf) state.commitTab = which
     document.body.classList.remove('side-hidden')
     $('#strip-changes').classList.toggle('active', !other)
     $('#strip-prs').classList.toggle('active', prs)
-    $('#strip-commit').classList.toggle('active', cmt)
+    $('#strip-commit').classList.toggle('active', cmt || shelf)
     $('#prl').hidden = !prs
     $('#cmt').hidden = !cmt
+    $('#shelf').hidden = !shelf
     for (const id of ['#tree', '#side > .side-tools']) $(id).hidden = other
     renderSideHead()
     if (prs) loadPrList()
     if (cmt) renderCommitPanel()
+    renderShelf()
 }
 
 function renderSideHead() {
-    const prs = state.sidePanel === 'prs', cmt = state.sidePanel === 'commit', other = prs || cmt
-    $('#pr-head').hidden = other || !state.cs?.pr
-    $('.side-head').classList.toggle('prs', other)
-    $('#side-title-text').textContent = prs ? `Pull Requests · ${state.target.repo}` : cmt ? 'Commit' : state.sideTitle || 'Changes'
-    $('#side-title').classList.toggle('no-menu', other || !state.cs?.commits?.length)
+    const prs = state.sidePanel === 'prs', tool = commitWindow()
+    $('#pr-head').hidden = prs || tool || !state.cs?.pr
+    $('.side-head').classList.toggle('prs', prs || tool)
+    $('#side-title').hidden = tool
+    $('#side-tabs').hidden = !tool
+    $('#stab-commit').classList.toggle('active', state.sidePanel === 'commit')
+    $('#stab-shelf').classList.toggle('active', state.sidePanel === 'shelf')
+    $('#side-title-text').textContent = prs ? `Pull Requests · ${state.target.repo}` : state.sideTitle || 'Changes'
+    $('#side-title').classList.toggle('no-menu', prs || !state.cs?.commits?.length)
 }
 
 async function loadPrList() {
@@ -1398,8 +1437,10 @@ function stepFile(dir, land = false) {
     if (i >= 0 && i < state.order.length) openFileAt(i, true, false, land ? dir : 0)
 }
 
+/** Shows the open file again (or the shelved file shown, against its current version). */
 function reopenFile(keepScroll = true) {
-    if (state.index >= 0) openFileAt(state.index, false, keepScroll)
+    if (state.shelfShown) showShelved(state.shelfShown)
+    else if (state.index >= 0) openFileAt(state.index, false, keepScroll)
 }
 
 /** A file's content at `ref`; `signal` stops waiting for it (fileLoad). */
@@ -1482,6 +1523,7 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
     if (!f) return
     disarmStep()
     const id = ++state.fileLoadId
+    state.shelfShown = null
     state.index = i
     state.tree.select(f.path)
     if (state.cmtTree?.root) state.cmtTree.select(f.path)
@@ -1546,7 +1588,8 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
     const monaco = state.monaco
     const lang = await ensureLanguage(monaco, languageForPath(f.path))
     if (id !== state.fileLoadId) return
-    const old = state.models
+    const old = [...state.models, ...state.shelfModels || []]
+    state.shelfModels = null
     // a fresh URI per load: the previous models are disposed only after the new ones are shown
     const uri = (side) => monaco.Uri.parse(`jd-${side}://${id}/${f.path.split('/').map(encodeURIComponent).join('/')}`)
     // a file whose text cannot be written back as it was read stays as it is (mod.readOnly says why)
@@ -2320,13 +2363,15 @@ function renderEdits() {
     state.tree?.setEdited(state.edits.keys())
     renderHeadTags()
     if (state.sidePanel === 'commit') renderCommitPanel()
+    renderShelf()
     saveEdits()
 }
 
 // stored per PR with the head they were made on, so they survive a reload or a closed browser: {head, files},
 // `pending`: [{path, head, text}] edits of another head not carried over to `head` yet (a read failed, or another tab
-// was on that head), tried again on each load, and `conflicts`: [{path, head, text}] edits of a file that changed on
-// GitHub since, kept aside (not applied) until the user copies or discards them
+// was on that head), tried again on each load, and `shelf`: [{id, name?, reason?, date, files: [{path, head, text}]}]
+// edits put aside, not applied: shelved by the user (`name`), or by a load (`reason` 'changed': the file changed on
+// GitHub since; 'replaced': the file was edited again since), newest first
 const editStore = () => store.get('edits', {}) || {}
 
 /** Stores `fn(entry)` as the PR's entry, read afresh as another tab may have written it; false when not kept. */
@@ -2334,8 +2379,9 @@ function writeStoredEdits(key, fn) {
     const all = editStore()
     const e = fn(all[key] || {})
     if (!e.pending?.length) delete e.pending
-    if (!e.conflicts?.length) delete e.conflicts
-    const has = Object.keys(e.files || {}).length || e.pending || e.conflicts
+    e.shelf = e.shelf?.filter((s) => s.files.length)
+    if (!e.shelf?.length) delete e.shelf
+    const has = Object.keys(e.files || {}).length || e.pending || e.shelf
     if (has) all[key] = e
     else delete all[key]
     const ok = store.set('edits', all)
@@ -2374,8 +2420,8 @@ function flushEdits() {
 
 /**
  * The edits of `cs` (path -> text), or null when a newer load started; none off a PR's full changes (they stay stored).
- * An edit made on another head is carried over when its file is the same at both heads, kept aside (`conflicts`) when
- * it changed, and kept as it is when a read fails (tried again on the next load).
+ * An edit made on another head is carried over when its file is the same at both heads, shelved when it changed, and
+ * kept as it is when a read fails (tried again on the next load).
  */
 async function attachEdits(t, cs, id, signal) {
     flushEdits()
@@ -2387,14 +2433,8 @@ async function attachEdits(t, cs, id, signal) {
     ]
     const same = new Map() // 'head:path' -> whether the file is the same at that head and at cs's
     await Promise.all(held(editStore()[key] || {}).map(async ({path, head: h}) => {
-        if (h === head) return same.set(`${h}:${path}`, true)
-        try {
-            const [a, b] = await Promise.all([getFileContent(t.owner, t.repo, h, path, {signal}), getFileContent(t.owner, t.repo, head, path, {signal})])
-            same.set(`${h}:${path}`, !a.binary && !b.binary && a.text === b.text)
-        } catch (e) {
-            // missing at one of the heads: changed
-            if (e.status === 404) same.set(`${h}:${path}`, false)
-        }
+        const s = await sameAt(t, path, h, head, signal)
+        if (s !== undefined) same.set(`${h}:${path}`, s)
     }))
     if (id !== state.loadId) return null
     // what was typed or written by another tab meanwhile is in storage now
@@ -2405,83 +2445,339 @@ async function attachEdits(t, cs, id, signal) {
     const changed = [], replaced = []
     writeStoredEdits(key, (e) => {
         files = e.head === head ? {...e.files} : {}
-        const pending = [], conflicts = [...e.conflicts || []]
+        const pending = [], shelf = e.shelf || [], made = []
+        // one entry for each reason, a file once in each
+        const shelve = (reason, h) => {
+            if (shelf.some((s) => s.files.some((f) => f.path === h.path && f.head === h.head && f.text === h.text))) return
+            let s = made.find((m) => m.reason === reason && !m.files.some((f) => f.path === h.path))
+            if (!s) made.push(s = {id: shelfId(), reason, date: Date.now(), files: []})
+            s.files.push(h)
+        }
         for (const h of held(e)) {
             const s = same.get(`${h.head}:${h.path}`)
             if (s === undefined) pending.push(h)
             else if (!s) {
                 changed.push(h.path)
-                if (!conflicts.some((c) => c.path === h.path && c.head === h.head && c.text === h.text)) conflicts.push(h)
+                shelve('changed', h)
             } else if (!(h.path in files)) files[h.path] = h.text
             else if (files[h.path] !== h.text) {
                 replaced.push(h.path)
-                if (!conflicts.some((c) => c.path === h.path && c.head === h.head && c.text === h.text)) conflicts.push(h)
+                shelve('replaced', h)
             }
         }
-        return {...e, head, files, pending, conflicts}
+        return {...e, head, files, pending, shelf: [...made, ...shelf]}
     })
-    if (changed.length) toast(`Your edits of ${filesLabel(changed)} are kept aside: changed on GitHub since`, 'error', 12000,
-        {label: 'Show', run: () => conflictsDialog(key)})
-    if (replaced.length) toast(`Your older edits of ${filesLabel(replaced)} are kept aside: edited again since`, 'error', 12000,
-        {label: 'Show', run: () => conflictsDialog(key)})
+    if (changed.length) toast(`Your edits of ${filesLabel(changed)} are shelved: changed on GitHub since`, 'error', 12000, {label: 'Show', run: openShelf})
+    if (replaced.length) toast(`Your older edits of ${filesLabel(replaced)} are shelved: edited again since`, 'error', 12000, {label: 'Show', run: openShelf})
     return new Map(Object.entries(files))
 }
 
-/** The edits of the PR `key` kept aside, as their file changed on GitHub since: [{path, head, text}]. */
-const conflictsOf = (key) => editStore()[key]?.conflicts || []
-
-/** Lists the edits kept aside, each with Copy, Download and Discard. */
-function conflictsDialog(key) {
-    const dlg = $('#dialog')
-    const render = () => {
-        const list = conflictsOf(key)
-        if (!list.length) {
-            if (dlg.open) dlg.close()
-            return renderCommitPanel(false)
-        }
-        dlg.innerHTML = `
-            <form class="dlg dlg-wide" method="dialog">
-                <h2>Edits kept aside</h2>
-                <p class="dim">These files changed on GitHub after you edited them, so your edits were not put on the new
-                version. Copy or download your text to make the edit again, or discard it.</p>
-                <div class="off-list">${list.map((c, i) => `
-                    <div class="off-row"><div class="off-name"><b>${esc(c.path)}</b><span class="dim">edited on ${esc(short(c.head))}</span></div>
-                        <button type="button" class="btn btn-small" data-copy="${i}">Copy</button>
-                        <button type="button" class="btn btn-small" data-download="${i}">Download</button>
-                        <button type="button" class="btn btn-small btn-ghost" data-discard="${i}">Discard</button></div>`).join('')}</div>
-                <div class="dlg-actions"><span class="spacer"></span><button type="button" class="btn" id="cf-close">Close</button></div>
-            </form>`
-        $('#cf-close', dlg).onclick = () => dlg.close()
-        const each = (attr, fn) => dlg.querySelectorAll(`[data-${attr}]`).forEach((b) => b.onclick = () => fn(list[+b.dataset[attr]]))
-        each('copy', async (c) => {
-            try {
-                await navigator.clipboard.writeText(c.text)
-                toast(`Copied your edit of ${baseName(c.path)}`)
-            } catch (e) {
-                toast(`Could not copy: ${e.message}`, 'error')
-            }
-        })
-        each('download', (c) => {
-            const a = document.createElement('a')
-            a.href = URL.createObjectURL(new Blob([c.text], {type: 'text/plain'}))
-            a.download = baseName(c.path)
-            a.click()
-            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
-        })
-        each('discard', (c) => {
-            if (!confirm(`Discard your edit of ${c.path}?`)) return
-            writeStoredEdits(key, (e) => ({...e, conflicts: (e.conflicts || []).filter((x) => !(x.path === c.path && x.head === c.head && x.text === c.text))}))
-            render()
-        })
+/** Whether `path` is the same at commits `a` and `b`; undefined when it could not be read. */
+async function sameAt(t, path, a, b, signal) {
+    if (a === b) return true
+    try {
+        const [x, y] = await Promise.all([getFileContent(t.owner, t.repo, a, path, {signal}), getFileContent(t.owner, t.repo, b, path, {signal})])
+        return !x.binary && !y.binary && x.text === y.text
+    } catch (e) {
+        // missing at one of them: changed
+        if (e.status === 404) return false
     }
-    render()
-    if (conflictsOf(key).length && !dlg.open) dlg.showModal()
-    renderCommitPanel(false)
+}
+
+// The Shelf, as in the IDE: edits put aside, by the user (Shelve Changes) or by a load. A shelved file shows against its
+// current version; Unshelve makes it an edit again where the file did not change since (else it needs a merge:
+// issues/open/three-way-merge.md).
+
+const SHELF_REASONS = {changed: 'Changed on GitHub since edited', replaced: 'Replaced by a newer edit'}
+const shelfName = (s) => s.name || SHELF_REASONS[s.reason] || 'Shelved changes'
+const shelfId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+/** The pull request whose Shelf shows, else null. */
+const shelfKey = () => state.target?.type === 'pr' ? prKey(state.target) : null
+/** The pull request's head now (also while one of its commits shows). */
+const prHead = () => state.cs?.pr?.head.sha
+/** The PR's Shelf, newest first. */
+const shelfOf = (key) => [...editStore()[key]?.shelf || []].sort((a, b) => b.date - a.date)
+
+/** The edit of `path` made on the PR's head now, if any. */
+function currentEdit(path) {
+    if (fullPr(state.cs)) return state.edits.get(path)
+    const e = editStore()[shelfKey()]
+    return e?.head === prHead() ? e.files?.[path] : undefined
+}
+
+// 'repo:shelved on:head:path' -> whether the file is the same at the two commits: true or false, null while it is read,
+// 'error' when it could not be (read again on the next load)
+const shelfChecks = new Map()
+
+function shelfSame(f) {
+    const t = state.target, head = prHead()
+    const k = `${repoName(t)}:${f.head}:${head}:${f.path}`
+    if (!shelfChecks.has(k)) {
+        shelfChecks.set(k, null)
+        sameAt(t, f.path, f.head, head).then((s) => { shelfChecks.set(k, s ?? 'error'); renderShelf() })
+    }
+    return shelfChecks.get(k)
+}
+
+/** Why the shelved file `f` cannot be unshelved now, else null. */
+function unshelveWhy(f) {
+    const name = baseName(f.path)
+    if (!fullPr(state.cs)) return 'Unshelve puts edits on the full changes of the pull request: choose All commits'
+    if (!canEditPr()) return 'Only the files of an open pull request can be edited'
+    if (!state.ready) return 'The pull request is loading'
+    if (state.edits.has(f.path)) return `${name} has an edit now: commit it or roll it back first (a merge is not built yet)`
+    const s = shelfSame(f)
+    if (s === null) return `Checking whether ${name} changed on GitHub since…`
+    if (s === 'error') return `${name} could not be read from GitHub to check that it did not change: reload to try again`
+    if (!s) return `${name} changed on GitHub since this edit (made on ${short(f.head)}): unshelving it needs a merge, not built yet`
+    return null
+}
+
+/** The Shelf's selection, the newest entry when none is: {entry, files, file} (`file` when one is); null for no entries. */
+function shelfSelection(list = shelfOf(shelfKey())) {
+    const sel = state.shelfSel
+    const entry = sel && list.find((s) => s.id === sel.id)
+    const file = entry && sel.path && entry.files.find((f) => f.path === sel.path)
+    if (entry && (file || !sel.path)) return {entry, files: file ? [file] : entry.files, file}
+    if (!list.length) return null
+    state.shelfSel = {id: list[0].id, path: null}
+    return {entry: list[0], files: list[0].files, file: null}
+}
+
+function openShelf() {
+    state.shelfSel = null
+    setSidePanel('shelf')
+    if (mobileQuery.matches) openDrawer()
+}
+
+/** The Shelf tab's count and the Commit tab's link to it; the Shelf itself when it shows. */
+function renderShelf() {
+    if (!shellBuilt || !commitWindow()) return
+    const key = shelfKey()
+    const list = key ? shelfOf(key) : []
+    const n = list.reduce((m, s) => m + s.files.length, 0)
+    $('#stab-shelf-n').textContent = n || ''
+    $('#cmt-shelf').hidden = !n
+    $('#cmt-shelf').textContent = `${plural(n, 'file')} on the Shelf`
+    if (state.sidePanel !== 'shelf') return
+    const sel = shelfSelection(list)
+    $('#shelf-list').innerHTML = list.map((s) => shelfEntryHtml(s, sel)).join('') || `<div class="tree-msg dim">${key
+        ? 'Nothing shelved. Edits put aside land here: <b>Shelve Changes</b> in the Commit tab, and edits of files that changed on GitHub since.'
+        : 'The Shelf keeps the edits of a pull request.'}</div>`
+    const why = sel ? sel.files.map(unshelveWhy) : []
+    const ok = why.filter((w) => !w).length, many = why.length > 1
+    const none = !sel && 'Nothing shelved'
+    setShelfAction('#sh-unshelve', none || (!ok && why.find(Boolean)), ok === why.length
+        ? `Unshelve: make ${many ? 'these edits' : 'this edit'} current again` : `Unshelve ${ok} of ${why.length} files; the others stay: ${why.find(Boolean)}`)
+    setShelfAction('#sh-copy', none || (many && 'Copy takes one file: select it'), 'Copy the shelved text')
+    setShelfAction('#sh-download', none, many ? 'Download the shelved files (.zip)' : 'Download the shelved file')
+    setShelfAction('#sh-delete', none, sel?.file ? 'Delete the file from the Shelf' : 'Delete the entry from the Shelf')
+}
+
+function shelfEntryHtml(s, sel) {
+    const open = !state.shelfCollapsed.has(s.id)
+    const date = new Date(s.date)
+    const why = s.name ? 'Shelved' : s.reason === 'changed' ? 'Put aside as the files changed on GitHub after the edits' : 'Put aside as the files were edited again since'
+    const head = `<div class="tr sh-entry${sel?.entry === s && !sel.file ? ' sel' : ''}" data-id="${esc(s.id)}" style="--d:0"
+            title="${esc(`${why} · ${date.toLocaleString()} · ${plural(s.files.length, 'file')}`)}">
+            <span class="tw">${open ? icons.chevronDown : icons.chevronRight}</span><span class="fi fi-glyph sh-ic">${icons.shelf}</span>
+            <span class="tn">${esc(shelfName(s))}</span><span class="tc sh-date">${esc(shortDate(date))}</span></div>`
+    return !open ? head : head + s.files.map((f) => {
+        const dir = f.path.slice(0, -baseName(f.path).length - 1)
+        return `<div class="tr tr-file sh-file${sel?.file === f ? ' sel' : ''}" data-id="${esc(s.id)}" data-path="${esc(f.path)}" style="--d:1"
+                title="${esc(`${f.path}, edited on ${short(f.head)}: compare with the current version`)}">
+                <span class="tw"></span>${fileIcon(f.path)}<span class="tn">${esc(baseName(f.path))}</span>${dir ? `<span class="tc sh-dir">${esc(dir)}</span>` : ''}</div>`
+    }).join('')
+}
+
+/** A date in a few characters, for a row: its time when today, else its day. */
+function shortDate(d) {
+    const now = new Date()
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit'})
+    return d.toLocaleDateString(undefined, {month: 'short', day: 'numeric', ...d.getFullYear() !== now.getFullYear() && {year: 'numeric'}})
+}
+
+/** A Shelf button, off with the reason as its tip (and a tap's toast: touch screens have no tips). */
+function setShelfAction(sel, why, title) {
+    const b = $(sel)
+    b.setAttribute('aria-disabled', String(!!why))
+    b.dataset.why = why || ''
+    b.title = why || title
+}
+
+function shelfAction(b, fn) {
+    if (b.dataset.why) return toast(b.dataset.why, 'info', 5000)
+    const sel = shelfSelection()
+    if (sel) fn(sel)
+}
+
+function onShelfClick(e) {
+    const row = e.target.closest('.tr')
+    if (!row) return
+    const {id, path} = row.dataset
+    if (!path) {
+        // the chevron, or a click on the entry selected, opens or closes it
+        if (e.target.closest('.tw') || (state.shelfSel?.id === id && !state.shelfSel.path))
+            state.shelfCollapsed.has(id) ? state.shelfCollapsed.delete(id) : state.shelfCollapsed.add(id)
+        state.shelfSel = {id, path: null}
+        return renderShelf()
+    }
+    state.shelfSel = {id, path}
+    renderShelf()
+    setTab('changes')
+    if (mobileQuery.matches) closeDrawer()
+    showShelved(state.shelfSel)
+}
+
+/** Takes the files `paths` out of the PR `key`'s shelf entry `id`; an entry left empty goes. */
+function dropShelved(key, id, paths) {
+    writeStoredEdits(key, (e) => ({...e, shelf: (e.shelf || []).map((s) => s.id === id ? {...s, files: s.files.filter((f) => !paths.includes(f.path))} : s)}))
+    renderShelf()
+}
+
+/** Leaves the shelved file shown for the changed file `path`, else for the one open before. */
+function leaveShelved(path) {
+    state.shelfShown = null
+    const i = state.order.findIndex((f) => f.path === path)
+    openFileAt(i >= 0 ? i : state.index, i >= 0)
+}
+
+function unshelveSelected({entry, files}) {
+    const ok = files.filter((f) => !unshelveWhy(f)), paths = ok.map((f) => f.path)
+    for (const f of ok) state.edits.set(f.path, f.text)
+    renderEdits()
+    flushEdits()
+    dropShelved(state.editKey, entry.id, paths)
+    toast(`Unshelved ${filesLabel(paths)}: edited here now`)
+    const shown = state.shelfShown
+    if (shown?.id === entry.id && paths.includes(shown.path)) leaveShelved(shown.path)
+    else if (!shown && paths.includes(currentFile()?.path)) reopenFile(true)
+}
+
+function deleteSelected({entry, files, file}) {
+    const key = shelfKey(), paths = files.map((f) => f.path)
+    dropShelved(key, entry.id, paths)
+    const shown = state.shelfShown
+    if (shown?.id === entry.id && paths.includes(shown.path)) leaveShelved()
+    toast(`Deleted ${file ? baseName(file.path) : `“${shelfName(entry)}”`} from the Shelf`, 'info', 10000,
+        {label: 'Undo', run: () => restoreShelved(key, entry, paths)})
+}
+
+/** Puts the files `paths` of `entry`, as it was before they were deleted, back on the PR `key`'s Shelf. */
+function restoreShelved(key, entry, paths) {
+    writeStoredEdits(key, (e) => {
+        const shelf = [...e.shelf || []], i = shelf.findIndex((s) => s.id === entry.id)
+        const files = entry.files.filter((f) => paths.includes(f.path) || shelf[i]?.files.some((x) => x.path === f.path))
+        if (i >= 0) shelf[i] = {...shelf[i], files}
+        else shelf.push({...entry, files})
+        return {...e, shelf: shelf.sort((a, b) => b.date - a.date)}
+    })
+    renderShelf()
+}
+
+async function copySelected({files: [f]}) {
+    try {
+        await navigator.clipboard.writeText(f.text)
+        toast(`Copied the shelved ${baseName(f.path)}`)
+    } catch (e) {
+        toast(`Could not copy: ${e.message}`, 'error')
+    }
+}
+
+async function downloadSelected({entry, files}) {
+    if (files.length === 1) return saveFile(baseName(files[0].path), new Blob([files[0].text], {type: 'text/plain'}))
+    const {strToU8, zipSync} = await import('fflate')
+    const zip = zipSync(Object.fromEntries(files.map((f) => [f.path, strToU8(f.text)])))
+    saveFile(`${shelfName(entry).replace(/[\\/:*?"<>|]+/g, '-')}.zip`, new Blob([zip], {type: 'application/zip'}))
+}
+
+function saveFile(name, blob) {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+
+/** Shows the shelved file `sel` ({id, path}) against its current version (the head's, with its edit if any), read-only. */
+async function showShelved(sel) {
+    const s = shelfOf(shelfKey()).find((x) => x.id === sel.id), f = s?.files.find((x) => x.path === sel.path)
+    if (!f || !state.cs) return
+    const id = ++state.fileLoadId
+    disarmStep()
+    setLoading(true)
+    const head = prHead()
+    const {signal, joined} = fileLoad()
+    const load = contentOf(head, f.path, signal)
+    joined()
+    const c = await load.catch((e) => e.status === 404 ? {text: '', missing: true} : {error: e})
+    if (id !== state.fileLoadId) return
+    if (c.error || c.binary) {
+        setLoading(false)
+        return toast(`Could not open ${f.path}: ${c.error ? errorText(c.error) : 'a binary file'}`, 'error')
+    }
+    const edit = currentEdit(f.path)
+    const monaco = state.monaco
+    const lang = await ensureLanguage(monaco, languageForPath(f.path))
+    if (id !== state.fileLoadId) return
+    const uri = (side) => monaco.Uri.parse(`jd-shelf-${side}://${id}/${f.path.split('/').map(encodeURIComponent).join('/')}`)
+    const shelved = monaco.editor.createModel(f.text, lang, uri('a'))
+    const current = monaco.editor.createModel(edit ?? c.text, lang, uri('b'))
+    const old = state.shelfModels
+    state.shelfModels = [shelved, current]
+    state.shelfShown = {id: s.id, path: f.path}
+    state.editableFile = false
+    state.tooLarge = false
+    state.fileFailed = false
+    applyEditable()
+    const labels = {
+        left: `${icons.lock}<span class="tag tag-ed" title="${esc(`On the Shelf: ${shelfName(s)}`)}">shelved</span>`
+            + `<span class="path">${esc(f.path)}</span><span class="dim">edited on ${short(f.head)}</span>`,
+        right: `${icons.lock}<span class="sha">${short(head)}</span><span class="dim">Current version</span>`
+            + (edit !== undefined ? '<span class="tag tag-ed" title="Edited here and not committed yet">with your edit</span>' : '')
+            + (c.missing ? '<span class="tag tag-note" title="The file is not at the head of the pull request">no such file</span>' : ''),
+    }
+    try {
+        if (renderer() === 'sbs') {
+            const changes = await computeDiff(shelved, current, () => id !== state.fileLoadId)
+            if (id !== state.fileLoadId) return
+            showView('sbs')
+            if (state.unified) setDiffModels(state.unified, null)
+            ensureSbs().setModels(shelved, current, changes, labels)
+            if (changes.length) state.sbs.goTo(0, false)
+        } else {
+            showView('unified')
+            $('#uni-left').innerHTML = labels.left
+            $('#uni-right').innerHTML = labels.right
+            $('#uni-head').classList.toggle('aligned', viewMode() === 'sbs')
+            const de = ensureUnified()
+            de.updateOptions(monacoOptions())
+            state.uniOrigin.from = 'scroll'
+            const updated = waitForDiff(de)
+            setDiffModels(de, {original: shelved, modified: current})
+            if (!await updated) throw new DiffTooLarge()
+            if (id !== state.fileLoadId) return
+            if (de.getLineChanges()?.length) uniGoTo(0)
+        }
+    } catch (e) {
+        if (!(e instanceof DiffTooLarge)) throw e
+        if (id !== state.fileLoadId) return
+        state.tooLarge = true
+        showMessage(`The diff of the shelved ${esc(f.path)} is too large to compute<div class="dim small">No result in ${(DIFF_TIME + DIFF_GRACE) / 1000} s</div>`)
+    } finally {
+        old?.forEach((m) => setTimeout(() => m.dispose(), 0))
+    }
+    $('#st-lang').innerHTML = `${fileIcon(f.path)}<span>${esc(languageName(languageForPath(f.path)))}</span>`
+    $('#st-stat').innerHTML = ''
+    setLoading(false)
+    updateToolbar()
 }
 
 // another tab of this PR wrote its edits: its changes are taken where this tab has none of its own
 window.addEventListener('storage', (ev) => {
-    if (ev.key !== 'jd.edits' || !state.editKey || !state.ready) return
+    if (ev.key !== 'jd.edits') return
+    renderShelf()
+    if (!state.editKey || !state.ready) return
     const e = editStore()[state.editKey] || {head: state.editHead, files: {}}
     if (e.head !== state.editHead) return
     const files = e.files || {}, base = state.editsBase
@@ -2570,9 +2866,6 @@ function renderCommitPanel(tree = true) {
         }
     }
     const amend = $('#cmt-amend').checked
-    const aside = state.target?.type === 'pr' ? conflictsOf(prKey(state.target)).length : 0
-    $('#cmt-aside').hidden = !aside
-    $('#cmt-aside').textContent = `${plural(aside, 'edit')} kept aside`
     $('#cmt-count').textContent = files.length ? `${included.length} modified` : ''
     const pr = state.cs?.pr
     $('#cmt-to').innerHTML = pr ? `to ${icons.branch}<span>${esc(pr.head.ref)}</span>` : ''
@@ -2935,6 +3228,11 @@ function editorContext(ed) {
     if (ed === state.fileEd) return state.outside && {...state.outside}
     const f = currentFile(), cs = state.cs
     if (!f || !cs) return null
+    if (state.shelfShown) {
+        // the shelved text is at no commit; the current version is the head's file (Back shows it on its own)
+        const {path} = state.shelfShown
+        return ed === state.sbs?.right || ed === state.unified?.getModifiedEditor() ? {path, side: 'outside', ref: prHead(), lang: languageForPath(path)} : null
+    }
     const lang = languageForPath(f.path)
     if (ed === state.sbs?.left || ed === state.unified?.getOriginalEditor()) return {path: f.prevPath || f.path, side: 'base', ref: cs.baseSha, lang}
     if (ed === state.sbs?.right || ed === state.unified?.getModifiedEditor()) return {path: f.path, side: 'head', ref: cs.headSha, lang}
@@ -3134,6 +3432,7 @@ let outsideId = 0
 /** Shows a file outside the changes on its own, read-only, at the location. */
 async function showOutside(loc) {
     const id = ++state.fileLoadId
+    state.shelfShown = null
     const monaco = state.monaco
     setLoading(true)
     let text = loc.text
@@ -3204,7 +3503,8 @@ function applyView() {
 
 function showView(which) {
     for (const v of ['sbs', 'unified', 'md', 'msg', 'file']) $('#view-' + v).classList.toggle('active', v === which)
-    $('#toolbar').classList.toggle('outside', which === 'file')
+    // a file on its own, or a shelved one: not a changed file to mark viewed or edit
+    $('#toolbar').classList.toggle('outside', which === 'file' || !!state.shelfShown)
     renderViewButtons()
 }
 
@@ -3441,6 +3741,7 @@ function actionItems() {
         A('Download for Offline…', () => offlineDialog(), {ic: icons.download}),
         state.cs?.pr && A('View Timeline', () => openTimeline(), {ic: icons.comment}),
         state.edits.size && A('Commit…', () => openCommitPanel(), {ic: icons.commit}),
+        shelfKey() && A('Shelf', openShelf, {ic: icons.shelf, sub: 'edits put aside'}),
         state.editableFile && A(state.editing ? 'Stop Editing' : 'Edit File', () => setEditing(!state.editing), {ic: icons.pencil}),
         A('Go to Declaration', () => goToDeclaration(), {hint: shortcut(s.keymap, DECLARATION), sub: 'the name at the caret'}),
         A('Back', () => goBack(-1), {hint: shortcut(s.keymap, BACK), ic: icons.left, sub: 'to where Go to Declaration started'}),

@@ -743,8 +743,23 @@ dialog:has(.dlg-wide) { width: min(560px, calc(100vw - 24px)); max-width: none; 
 .rec-exit { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; padding: 2px 4px; }
 body.has-rec-bar #app { height: calc(100% - 28px); height: calc(100dvh - 28px); }
 body.has-rec-bar #landing { height: calc(100% - 28px); }
-.cmt-aside { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
-.cmt-aside:hover { text-decoration: underline; }
+.cmt-shelf { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
+.cmt-shelf:hover { text-decoration: underline; }
+/* the Commit tool window's tabs, as in the IDE: Commit and Shelf */
+.side-tabs { display: flex; align-self: stretch; gap: 2px; min-width: 0; }
+#btn-drawer-close { margin-left: auto; }
+.side-tab { display: flex; align-items: center; gap: 5px; border: 0; border-bottom: 2px solid transparent; background: none; padding: 2px 8px 0; color: var(--fg); font-weight: 500; cursor: pointer; }
+.side-tab:hover { color: var(--fg-strong); }
+.side-tab.active { color: var(--fg-strong); border-bottom-color: var(--accent); }
+.side-tab-n { font-size: 10.5px; padding: 0 5px; border-radius: 8px; background: var(--bg-on); color: var(--fg); font-weight: 600; }
+.side-tab-n:empty { display: none; }
+.shelf { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.tb-btn[aria-disabled="true"] { opacity: 0.35; cursor: default; background: none; }
+.sh-entry .tn { color: var(--fg-strong); }
+.sh-ic { color: var(--icon-dim); }
+.sh-date { margin-left: auto; padding-left: 8px; flex-shrink: 0; }
+.sh-file .tn { flex-shrink: 0; max-width: 70%; color: var(--modified); }
+.sh-dir { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .land-snap .ic { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; }
 .land h3 .dim { font-weight: 400; }
 @media (max-width: 760px) {

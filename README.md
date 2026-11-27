@@ -150,9 +150,14 @@ The pencil over the diff makes the right side (the pull request's head) editable
 to the pull request's branch, with Amend and Undo. Amend keeps the amended commit's author and date, as `git commit
 --amend` does; its committer is the one set in Commit Options, else the author set there, else the token's account.
 Edits are kept on the device until committed; an edited file has a dot in the tree and "edited here" over its diff. A file that is not valid UTF-8, or has both CRLF and LF line endings,
-opens read-only (its label says why), as an edit would change the rest of the file too. When the pull request gets
-new commits that change an edited file, the edit is kept aside, not applied: the Commit panel lists it to copy,
-download or discard.
+opens read-only (its label says why), as an edit would change the rest of the file too.
+
+The **Shelf**, a tab next to Commit as in the IDE, keeps edits put aside, newest first: when the pull request gets new
+commits that change an edited file, the edit goes there instead of on the new version (an older edit replaced by a
+newer one too). A shelved file shows against its current version (the head's, with its edit if it has one), read-only.
+Unshelve makes it an edit again, when the file did not change on GitHub since the edit and has no edit now (merging
+them is not built yet: the button says why it is off); a file or a whole entry can also be copied, downloaded (several
+files as a .zip) or deleted, with Undo.
 
 ### Offline
 

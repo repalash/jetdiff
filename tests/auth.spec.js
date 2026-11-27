@@ -68,7 +68,7 @@ test('Sign out asks first, revokes the token, and removes the data saved on this
     const logouts = await withStorage(page, context, {...DATA, 'jd.token': 'tok1', 'jd.tokenExpires': String(Date.now() + 3600000)})
     await expect(page.locator('#so-data')).toBeChecked()
     await expect(page.locator('#so-edits')).not.toBeChecked()
-    await expect(page.locator('#dialog')).toContainText('Also remove my unpushed edits (1 file)')
+    await expect(page.locator('#dialog')).toContainText('Also remove my unpushed edits, the shelved ones too (1 file)')
     await page.locator('#so-go').click()
     await expect(page.locator('#toasts')).toContainText('Signed out')
     expect(logouts).toEqual([{token: 'tok1'}])

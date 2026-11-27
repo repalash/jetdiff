@@ -216,40 +216,28 @@ test('Amend keeps the commit\'s author and date; its committer is the saved one,
     ])
 })
 
-test('an edit of a file that changed on GitHub since is kept aside, to copy, download or discard', async ({page}) => {
+test('an edit of a file that changed on GitHub since is shelved, not applied', async ({page}) => {
     const {github} = page
     branch(github)
     github.handle(({method, path}) => method === 'GET' && path.includes('/contents/') && path.endsWith(`ref=${OLD}`) && {raw: 'the file before\n'})
-    await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {value: {writeText: async (t) => { window.copied = t }}}))
     await seedOnce(page, seed('jd.edits', {[KEY]: {head: OLD, files: {[FILE]: 'my edit\n'}}}))
     await page.goto(`./?pr=${PR}&file=${FILE}`)
     await ready(page)
     await expect(page.locator('#tree .tr-file.edited')).toHaveCount(0)
-    expect(await storedEdits(page)).toEqual({head: HEAD, files: {}, conflicts: [{path: FILE, head: OLD, text: 'my edit\n'}]})
+    expect(await storedEdits(page)).toEqual({head: HEAD, files: {}, shelf: [
+        {id: expect.any(String), reason: 'changed', date: expect.any(Number), files: [{path: FILE, head: OLD, text: 'my edit\n'}]},
+    ]})
+    await expect(page.locator('#toasts')).toContainText('are shelved: changed on GitHub since')
     await page.locator('.toast-action', {hasText: 'Show'}).click()
-    const row = page.locator('#dialog .off-row', {hasText: FILE})
-    await row.locator('[data-copy]').click()
-    await expect.poll(() => page.evaluate(() => window.copied)).toBe('my edit\n')
-    const download = page.waitForEvent('download')
-    await row.locator('[data-download]').click()
-    expect((await download).suggestedFilename()).toBe('CloudAuth.ts')
-    expect(fs.readFileSync(await (await download).path(), 'utf8')).toBe('my edit\n')
-    await page.locator('#cf-close').click()
-    await page.locator('#strip-commit').click()
-    await page.locator('#cmt-aside', {hasText: '1 edit kept aside'}).click()
-    page.once('dialog', (d) => d.accept())
-    await row.locator('[data-discard]').click()
-    await expect(page.locator('#dialog')).toBeHidden()
-    await expect(page.locator('#cmt-aside')).toBeHidden()
-    expect(await storedEdits(page)).toBeUndefined()
+    await expect(page.locator('#shelf .sh-file')).toHaveAttribute('data-path', FILE)
 })
 
-test('an older edit replaced by a newer edit of the same file is kept aside, not dropped', async ({page}) => {
+test('an older edit replaced by a newer edit of the same file is shelved, not dropped', async ({page}) => {
     page.github.alias[OLD] = HEAD
     await seedOnce(page, seed('jd.edits', {[KEY]: {head: HEAD, files: {[FILE]: 'newer\n'}, pending: [{path: FILE, head: OLD, text: 'older\n'}]}}))
     await page.goto(`./?pr=${PR}&file=${FILE}`)
     await ready(page)
-    expect(await storedEdits(page)).toMatchObject({head: HEAD, files: {[FILE]: 'newer\n'}, conflicts: [{path: FILE, head: OLD, text: 'older\n'}]})
+    expect(await storedEdits(page)).toMatchObject({head: HEAD, files: {[FILE]: 'newer\n'}, shelf: [{reason: 'replaced', files: [{path: FILE, head: OLD, text: 'older\n'}]}]})
     await expect(page.locator('#toasts')).toContainText('older edits of')
 })
 
