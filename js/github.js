@@ -113,7 +113,7 @@ function errorMessage(status, token) {
 }
 
 /** A request that gets no answer, or no more of its body, for this long has stalled: it is given up. */
-export const STALL_MS = 30000
+const STALL_MS = 30000
 
 /**
  * fetch(), its body read here, given up when nothing comes for STALL_MS (`who` names the site in the error then);

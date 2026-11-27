@@ -1500,6 +1500,7 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
     state.editableFile = false
     state.tooLarge = false
     state.fileFailed = false
+    state.mdHeld = false
     applyEditable()
     updateToolbar()
     setLoading(true)
