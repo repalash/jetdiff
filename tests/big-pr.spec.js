@@ -330,3 +330,55 @@ test.describe('a link that opens nothing says why', () => {
         await expect(page.locator('#tree .tr-file.sel')).toHaveAttribute('data-file', 'a.ts')
     })
 })
+
+test.describe('a huge file', () => {
+    // TypeScript as a big file has it, changed every 50 lines
+    const code = (n, v) => Array.from({length: n}, (_, i) => [
+        `export function handler${i}(request: Request, options: {retries?: number} = {}): Promise<Response> {`,
+        `    const url = new URL(request.url, 'https://example.com/${i % 50 === 6 ? v : 'a'}') // ${i}`,
+        `    if (options.retries && options.retries > ${i % 7}) return fetch(url.href, {method: 'GET'})`,
+        `    return Promise.resolve(new Response(JSON.stringify({id: ${i}, name: "item-${i}"}), {status: 200}))`,
+        '}',
+    ][i % 5]).join('\n') + '\n'
+
+    /** The longest task while `fn` runs, in ms. */
+    async function longestTask(page, fn) {
+        await page.evaluate(() => {
+            window.jdLongest = 0
+            window.jdTasks = new PerformanceObserver((l) => { for (const e of l.getEntries()) window.jdLongest = Math.max(window.jdLongest, e.duration) })
+            window.jdTasks.observe({type: 'longtask'})
+        })
+        await fn()
+        return page.evaluate(() => { window.jdTasks.disconnect(); return window.jdLongest })
+    }
+
+    for (const view of ['unified', 'sbs']) {
+        test(`of 19,000 lines opens on a phone without freezing it (${view}) @phone`, async ({page}) => {
+            test.setTimeout(120000)
+            await page.addInitScript((v) => localStorage.setItem('jd.view', JSON.stringify(v)), view)
+            const pr = fakePr(page.github, ++number, [{filename: 'big.ts', old: code(19000, 'a'), new: code(19000, 'b')}, {filename: 'small.ts', old: 'a\n', new: 'b\n'}])
+            await page.goto(`${pr.url}&file=small.ts`)
+            await ready(page)
+            const longest = await longestTask(page, async () => {
+                await page.locator('#btn-drawer').click()
+                await page.locator('#tree .tr-file[data-file="big.ts"]').click()
+                await ready(page)
+                await expect(page.locator('#diff-count')).toHaveText('380 differences')
+            })
+            // the lines shown are colored
+            await expect.poll(() => page.evaluate(() => new Set([...document.querySelectorAll('#viewer .view-line span[class^="mtk"]')].map((s) => s.className)).size)).toBeGreaterThan(3)
+            expect(longest).toBeLessThan(2000)
+        })
+    }
+
+    test('of under 1000 lines, in the unified view, shows its deleted lines in color at once', async ({page}) => {
+        await page.addInitScript(() => localStorage.setItem('jd.view', '"unified"'))
+        const old = code(990, 'a'), now = old.split('\n').filter((_, i) => i < 900 || i > 904).join('\n')
+        const pr = fakePr(page.github, ++number, [{filename: 'big.ts', old, new: now}])
+        await page.goto(pr.url)
+        await ready(page)
+        const deleted = page.locator('.editor.modified .view-zones .view-line').first()
+        await expect(deleted).toBeVisible()
+        expect(await deleted.evaluate((l) => new Set([...l.querySelectorAll('span[class^="mtk"]')].map((s) => s.className)).size)).toBeGreaterThan(3)
+    })
+})

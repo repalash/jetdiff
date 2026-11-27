@@ -1558,10 +1558,13 @@ async function openFileAt(i, push = true, keepScroll = false, land = 0) {
         registerHover(monaco, lang)
     }
     if (state.editableFile) modified.onDidChangeContent(() => onEdited(f, original, modified, id))
-    // tokenize up front: deleted lines in the unified view otherwise can render before their colors exist
-    for (const m of state.models) if (m.getLineCount() < 20000) m.tokenization.forceTokenization(m.getLineCount())
-
     const preview = mdPreviewOn(f)
+    // the unified view draws the deleted lines once, with the original's tokens as they are then (Monaco 0.52 means to
+    // draw them again once it has tokenized the original, but misses it: issues/open/unified-deleted-lines-colors.md),
+    // so a small original with deletions is tokenized up front. Monaco tokenizes the rest as it is shown: a big file's
+    // deleted lines show without colors, as tokenizing 19,000 lines up front froze a phone for 40 s.
+    if (!preview && renderer() === 'monaco' && uniInline() && f.deletions !== 0 && original.getLineCount() <= TOKENIZE_UP_FRONT)
+        original.tokenization.forceTokenization(original.getLineCount())
     $('#seg-md').hidden = !isMarkdown(f.path)
     $('#btn-md-preview').classList.toggle('on', preview)
     $('#btn-md-code').classList.toggle('on', !preview)
@@ -2743,6 +2746,9 @@ function prefetch(i, signal) {
     if (f.status !== 'added' && cs.baseSha) contentOf(cs.baseSha, f.prevPath || f.path, signal).catch(() => {})
     if (f.status !== 'removed') contentOf(cs.headSha, f.path, signal).catch(() => {})
 }
+
+// the most lines of an original tokenized before the unified view shows it (about a second on a slow phone)
+const TOKENIZE_UP_FRONT = 1000
 
 // Monaco's time for one diff: past it, it gives a coarser diff
 const DIFF_TIME = 20000
